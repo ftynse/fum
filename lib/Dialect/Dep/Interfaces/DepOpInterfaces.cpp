@@ -9,6 +9,7 @@
 #include "fum/Dialect/Dep/Interfaces/DepOpInterfaces.h"
 #include "fum/Dialect/Dep/Interfaces/DepTypeInteraces.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/SymbolTable.h"
 
 #include "fum/Dialect/Dep/Interfaces/DepOpInterfaces.cpp.inc"
 
@@ -16,21 +17,22 @@ using namespace mlir;
 using namespace mlir::dep;
 
 LogicalResult mlir::dep::verifyTypesInOps(
-    function_ref<LogicalResult(Location, Type)> checkTypeSingle,
+    function_ref<LogicalResult(Operation *, Location, Type)> checkTypeSingle,
     Operation *root) {
   // Verify usage of dependent type parameters on this type and any nested type,
   // including indirectly via attributes.
-  auto checkType = [&](Location loc, Type type) -> LogicalResult {
+  auto checkType = [&](Operation *owner, Location loc,
+                       Type type) -> LogicalResult {
     // Avoid recursively calling itself from walkers, they will traverse the
     // nested structure anyway.
     AttrTypeWalker walker;
     walker.addWalk([&](DepTypeInterface subType) {
-      if (failed(checkTypeSingle(loc, subType)))
+      if (failed(checkTypeSingle(owner, loc, subType)))
         return WalkResult::interrupt();
       return WalkResult::advance();
     });
     walker.addWalk([&](TypeAttr typeAttr) {
-      if (failed(checkTypeSingle(loc, typeAttr.getValue())))
+      if (failed(checkTypeSingle(owner, loc, typeAttr.getValue())))
         return WalkResult::interrupt();
       return WalkResult::advance();
     });
@@ -46,24 +48,24 @@ LogicalResult mlir::dep::verifyTypesInOps(
       return WalkResult::skip();
 
     for (Type t : op->getOperandTypes()) {
-      if (failed(checkType(op->getLoc(), t)))
+      if (failed(checkType(op, op->getLoc(), t)))
         return WalkResult::interrupt();
     }
     for (Type t : op->getResultTypes()) {
-      if (failed(checkType(op->getLoc(), t)))
+      if (failed(checkType(op, op->getLoc(), t)))
         return WalkResult::interrupt();
     }
     for (Region &region : op->getRegions()) {
       for (Block &block : region.getBlocks()) {
         for (BlockArgument arg : block.getArguments()) {
-          if (failed(checkType(arg.getLoc(), arg.getType())))
+          if (failed(checkType(op, arg.getLoc(), arg.getType())))
             return WalkResult::interrupt();
         }
       }
     }
     for (NamedAttribute named : op->getAttrs()) {
       WalkResult subResult = named.getValue().walk([&](TypeAttr typeAttr) {
-        if (failed(checkType(op->getLoc(), typeAttr.getValue())))
+        if (failed(checkType(op, op->getLoc(), typeAttr.getValue())))
           return WalkResult::interrupt();
         return WalkResult::advance();
       });
@@ -88,7 +90,8 @@ LogicalResult mlir::dep::verifyDependentTypeUsage(Operation *root) {
     boundTypeParams.insert_range(llvm::make_second_range(iface.getBindings()));
   }
 
-  auto checkTypeSingle = [&](Location loc, Type type) -> LogicalResult {
+  auto checkTypeSingle = [&](Operation *owner, Location loc,
+                             Type type) -> LogicalResult {
     auto depType = dyn_cast<DepTypeInterface>(type);
     if (!depType)
       return success();
@@ -98,6 +101,12 @@ LogicalResult mlir::dep::verifyDependentTypeUsage(Operation *root) {
         return emitError(loc)
                << "dependent type " << type << " uses type parameter " << attr
                << " not bound to a value";
+      }
+    }
+    for (SymbolRefAttr symbol : depType.getReferencedSymbols()) {
+      if (!SymbolTable::lookupNearestSymbolFrom(owner, symbol)) {
+        return emitError(loc) << "dependent type " << type
+                              << " references undefined symbol " << symbol;
       }
     }
     return success();

@@ -107,6 +107,8 @@ def DepCallOp : Dep_Op<"call"> {
 }
 
 def DepBindOp : Dep_Op<"bind", [
+    RecursiveMemoryEffects,
+    RecursivelySpeculatable,
     DeclareOpInterfaceMethods<DepBinderOpInterface>]> {
   let summary = "Binds values to parameters of dependent types inline";
   let description = [{
@@ -133,6 +135,94 @@ def DepBindOp : Dep_Op<"bind", [
       return getOperand(position).getType();
     }
   }];
+}
+
+def DepTypeConstructorOp : Dep_Op<"type.constructor", [
+    SymbolName,
+    SymbolVisibility,
+    Symbol,
+    DeclareOpInterfaceMethods<DepBinderOpInterface>]> {
+  let summary = "Constructor for types";
+  let description = [{
+    Creates an instance of a type with specified parameters allowing for
+    non-trivial relations between parameters and pure computation during type
+    elaboration.
+  }];
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    ArrayAttr:$binds, // TODO: same as other binds
+    TypedArrayAttrBase<TypeAttr, "array of type attributes">:$input_types,
+    OptionalAttr<StrAttr>:$sym_visibility
+  );
+  let regions = (region
+    MaxSizedRegion<1>:$requires,
+    SizedRegion<1>:$body
+  );
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    int64_t getMaxBindablePosition() {
+      return getInputTypes().size();
+    }
+
+    ::mlir::Type getBoundValueType(int64_t position) {
+      return ::mlir::cast<::mlir::TypeAttr>(getInputTypes()[position]).getValue();
+    }
+  }];
+}
+
+def DepTypeOp : Dep_Op<"type", [ConstantLike, Pure]> {
+  let summary = "Materializes the type given as attribute as a value";
+  let description = [{
+    This is a constant-like operation creating a value of type `!dep.type`.
+  }];
+  let arguments = (ins
+    TypeAttr:$arg_type
+  );
+  let results = (outs
+    DepTypeType:$result
+  );
+  let hasVerifier = 1;
+  let assemblyFormat = "$arg_type attr-dict";
+}
+
+def DepTypeSumOp : Dep_Op<"type.sum", [Pure]> {
+  let summary = "Creates a sum type of the given types";
+  let description = [{
+    Type constructor creating a sum type, i.e., a type that can take any of the
+    values of the types it is constructed from. In imperative languages, this
+    can be understood as a tagged union.
+  }];
+  let arguments = (ins
+    Variadic<DepTypeType>:$subtypes
+  );
+  let results = (outs
+    DepTypeType:$result
+  );
+  let hasVerifier = 1;
+  let assemblyFormat = "$subtypes attr-dict";
+}
+
+def DepTypeProductOp : Dep_Op<"type.product", [Pure]> {
+  let summary = "Creates a product type of the given types";
+  let description = [{
+    Type constructor creating a product type, i.e., a type whose value is a
+    combination (a cartesian product) of the values of its subtypes. In
+    imperative languages, this can be seen as a tuple.
+
+    The type may optionally have names for its elements, provided in an
+    attribute co-indexed with the list of subtypes.
+  }];
+  let arguments = (ins
+    Variadic<DepTypeType>:$subtypes,
+    OptionalAttr<StrArrayAttr>:$names
+  );
+  let results = (outs
+    DepTypeType:$result
+  );
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
 }
 
 def DepYieldOp: Dep_Op<"yield", [Terminator, Pure]> {

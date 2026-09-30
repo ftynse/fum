@@ -10,6 +10,7 @@
 #define DEP_TYPES
 
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/BuiltinAttributes.td"
 include "fum/Dialect/Dep/IR/DepDialect.td"
 include "fum/Dialect/Dep/Interfaces/DepTypeInterfaces.td"
 
@@ -34,6 +35,37 @@ def DepBitVectorType : TypeDef<Dep_Dialect, "DependentBitVector",
     ::llvm::SmallVector<::mlir::Attribute> getParams() {
       return {::mlir::StringAttr::get(getContext(), getWidth())};
     }
+  }];
+}
+
+def DepConstructedType : TypeDef<Dep_Dialect, "ConstructedType",
+    [DeclareTypeInterfaceMethods<DepTypeInterface>]> {
+  let mnemonic = "constructed";
+  let parameters = (ins "SymbolRefAttr":$constructor,
+                        "ArrayAttr":$typeParams);
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+
+  let extraClassDeclaration = [{
+    ::llvm::SmallVector<::mlir::Attribute> getParams() {
+      ::llvm::SmallVector<::mlir::Attribute> params;
+      params.append(getTypeParams().begin(), getTypeParams().end());
+      return params;
+    }
+
+    ::llvm::SmallVector<::mlir::SymbolRefAttr> getReferencedSymbols() {
+      return {getConstructor()};
+    }
+  }];
+}
+
+def DepTypeType : TypeDef<Dep_Dialect, "DependentType"> {
+  let mnemonic = "type";
+  let description = [{
+    Opaque type for representing other types as values. That is, a value of
+    `!dep.type` is itself a type. This allows us to manipulate types as
+    first-class objects in the IR and blur the boundary between types and
+    values, which is desired, e.g., in type constructors.
   }];
 }
 

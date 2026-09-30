@@ -301,3 +301,126 @@ func.func @unknown_bind_operand(%value: i32) {
   }
   return
 }
+
+// -----
+
+dep.type.constructor @mismatched_product_names()
+binds {
+}
+{
+  %value = dep.type i32
+  // expected-error @+1 {{expects 'names' to have 1 entries, but got 2}}
+  %product = "dep.type.product"(%value) {names = ["first", "second"]}
+      : (!dep.type) -> !dep.type
+  dep.yield %product : !dep.type
+}
+
+// -----
+
+// expected-error @+1 {{expects 'requires' region blocks to yield a single i1 value}}
+dep.type.constructor @bad_requires(%N: i32)
+binds {
+  %N -> "N"
+}
+requires {
+^bb0(%N: i32):
+  %value = arith.constant 0 : i32
+  dep.yield %value : i32
+}
+{
+  %value = dep.type i32
+  dep.yield %value : !dep.type
+}
+
+// -----
+
+// expected-error @+1 {{expects the 'body' region to yield a single !dep.type value}}
+dep.type.constructor @bad_body_yield(%N: i32)
+binds {
+}
+requires {
+  %okay = arith.constant true
+  dep.yield %okay : i1
+}
+{
+  dep.yield %N : i32
+}
+
+// -----
+
+// expected-error @+1 {{expects 'body' region to contain only pure operations}}
+dep.type.constructor @impure_body(%N: i32)
+binds {
+}
+requires {
+  %okay = arith.constant true
+  dep.yield %okay : i1
+}
+{
+  "test.not_pure"() : () -> ()
+  %value = dep.type i32
+  dep.yield %value : !dep.type
+}
+
+// -----
+
+// expected-error @+1 {{expects 'body' region to contain only pure operations}}
+dep.type.constructor @impure_nested_bind()
+binds {
+}
+{
+  %bound = dep.bind () -> !dep.type
+  binds {
+  }
+  {
+    "test.not_pure"() : () -> ()
+    %value = dep.type i32
+    dep.yield %value : !dep.type
+  }
+  dep.yield %bound : !dep.type
+}
+
+// -----
+
+func.func @type_outside_constructor() {
+  // expected-error @+1 {{must appear inside a dep.type.constructor operation}}
+  %value = dep.type i32
+  return
+}
+
+// -----
+
+func.func @type_sum_outside_constructor() {
+  %element = "test.type"() : () -> !dep.type
+  // expected-error @+1 {{must appear inside a dep.type.constructor operation}}
+  %sum = dep.type.sum %element
+  return
+}
+
+// -----
+
+func.func @type_product_outside_constructor() {
+  %element = "test.type"() : () -> !dep.type
+  // expected-error @+1 {{must appear inside a dep.type.constructor operation}}
+  %product = dep.type.product %element
+  return
+}
+
+// -----
+
+func.func @invalid_constructed_type_parameters() {
+  // expected-error @below {{expected constructed type parameters to be string attributes}}
+  "test.make"() : () -> !dep.constructed<@Float("N", 1)>
+  return
+}
+
+// -----
+
+dep.type.constructor @undefined_type_constructor()
+binds {
+}
+{
+  // expected-error @below {{dependent type '!dep.constructed<@Missing()>' references undefined symbol @Missing}}
+  %value = dep.type !dep.constructed<@Missing()>
+  dep.yield %value : !dep.type
+}
