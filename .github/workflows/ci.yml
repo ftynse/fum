@@ -1,0 +1,78 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LLVM_ROOT: ${{ github.workspace }}/.llvm
+
+jobs:
+  check-fum:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out fum
+        uses: actions/checkout@v4
+
+      - name: Read LLVM revision
+        id: llvm-version
+        run: echo "commit=$(<llvm-version.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore LLVM
+        id: llvm-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.LLVM_ROOT }}
+          # Bump v1 if the LLVM configuration below changes.
+          key: llvm-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.llvm-version.outputs.commit }}
+
+      - name: Check out LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: llvm/llvm-project
+          ref: ${{ steps.llvm-version.outputs.commit }}
+          path: llvm-project
+          fetch-depth: 1
+
+      - name: Build LLVM and MLIR
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        run: |
+          cmake -G Ninja -S llvm-project/llvm -B llvm-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$LLVM_ROOT" \
+            -DBUILD_SHARED_LIBS=ON \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_ENABLE_PROJECTS=mlir \
+            -DLLVM_INSTALL_UTILS=ON \
+            -DLLVM_TARGETS_TO_BUILD=Native
+          cmake --build llvm-build --target install
+          cmake -E copy_directory llvm-project/llvm/utils/lit "$LLVM_ROOT/share/lit"
+
+      - name: Save LLVM
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.LLVM_ROOT }}
+          key: ${{ steps.llvm-cache.outputs.cache-primary-key }}
+
+      - name: Configure fum
+        run: |
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMLIR_DIR="$LLVM_ROOT/lib/cmake/mlir" \
+            -DLLVM_EXTERNAL_LIT="$LLVM_ROOT/share/lit/lit.py" \
+            -DMLIR_INCLUDE_TESTS=ON \
+            -DLLVM_ENABLE_ASSERTIONS=ON
+
+      - name: Run tests
+        env:
+          LD_LIBRARY_PATH: ${{ env.LLVM_ROOT }}/lib
+        run: cmake --build build --target check-fum
