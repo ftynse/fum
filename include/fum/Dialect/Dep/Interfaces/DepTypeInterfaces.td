@@ -46,6 +46,16 @@ def DepTypeInterface : TypeInterface<"DepTypeInterface"> {
       /*returnType=*/"::llvm::SmallVector<::mlir::Attribute>",
       /*name=*/"getParams",
       /*arguments=*/(ins)
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Returns the symbols referenced by the type.
+      }],
+      /*returnType=*/"::llvm::SmallVector<::mlir::SymbolRefAttr>",
+      /*name=*/"getReferencedSymbols",
+      /*arguments=*/(ins),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{ return {}; }]
     >
   ];
 

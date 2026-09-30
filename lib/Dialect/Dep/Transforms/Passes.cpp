@@ -26,7 +26,8 @@ namespace mlir::dep {
 
 // Verifies that dependent types are not used outside of any binder operation.
 static LogicalResult verifyDepTypeUsageOutsideContext(Operation *root) {
-  auto checkTypeSingle = [](Location loc, Type type) -> LogicalResult {
+  auto checkTypeSingle = [](Operation *, Location loc,
+                            Type type) -> LogicalResult {
     if (!isa<DepTypeInterface>(type))
       return success();
     return emitError(loc)

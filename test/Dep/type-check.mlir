@@ -49,6 +49,14 @@ func.func @dependent_type_outside_binder() {
 
 // -----
 
+func.func @constructed_type_outside_binder() {
+  // expected-error @+1 {{dependent type used outside of the binder context}}
+  %value = "test.out_of_thin_air"() : () -> !dep.constructed<@Missing()>
+  return
+}
+
+// -----
+
 module attributes {dep.with_dependent_types} {
 // CHECK-LABEL: zero_is_folded_away
 func.func private @zero_is_folded_away(%szA: i32, %szB: i32) {

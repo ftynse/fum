@@ -14,9 +14,9 @@
 namespace mlir::dep {
 // Uses `checkTypeSingle` on each type present inside the root operation, be
 // operands, results, block arguments or attribute structures.
-LogicalResult
-verifyTypesInOps(function_ref<LogicalResult(Location, Type)> checkTypeSingle,
-                 Operation *root);
+LogicalResult verifyTypesInOps(
+    function_ref<LogicalResult(Operation *, Location, Type)> checkTypeSingle,
+    Operation *root);
 
 // Verify usage of dependent types in binder operations, e.g., that all type
 // parameters are bound at the use site.

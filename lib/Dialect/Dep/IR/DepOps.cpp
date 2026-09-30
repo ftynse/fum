@@ -55,10 +55,28 @@ static LogicalResult verifyDepBinderOp(OpTy op) {
   return success();
 }
 
-// Verify the 'requires' and 'ensures' regions of a binder operation.
-// `inputTypes` contains the types of values that may be bound, in order.
+// Verify that a region contains only operations with no side effects.
+static LogicalResult verifyPureRegion(Operation *op, Region &region,
+                                      StringRef regionName) {
+  WalkResult walkResult = region.walk([](Operation *op) {
+    if (!isPure(op))
+      return WalkResult::interrupt();
+    if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
+      return WalkResult::skip();
+    return WalkResult::advance();
+  });
+  if (walkResult.wasInterrupted())
+    return op->emitOpError() << "expects '" << regionName
+                             << "' region to contain only pure operations";
+  return success();
+}
+
+// Verify one auxiliary region of a binder operation. `inputTypes` contains
+// the types of values that may be bound, in order.
 template <typename OpTy>
-static LogicalResult verifyDepBinderAuxRegions(OpTy op, TypeRange inputTypes) {
+static LogicalResult verifyDepBinderAuxRegion(OpTy op, Region &region,
+                                              TypeRange inputTypes,
+                                              StringRef name) {
   SmallVector<Type> parameterTypes;
   parameterTypes.reserve(inputTypes.size());
   llvm::SmallDenseSet<int64_t> dependentParamPositions;
@@ -71,53 +89,47 @@ static LogicalResult verifyDepBinderAuxRegions(OpTy op, TypeRange inputTypes) {
     parameterTypes.push_back(t);
   }
 
-  auto checkAuxRegion = [&](Region &region, StringRef name) -> LogicalResult {
-    if (region.empty())
-      return success();
+  if (region.empty())
+    return success();
 
-    if (region.getNumArguments() != parameterTypes.size()) {
-      return op.emitOpError()
-             << "expects the '" << name
-             << "' region to have as many arguments as "
-                "bound dependent type parameters, got "
-             << region.getNumArguments() << " vs " << parameterTypes.size();
-    }
+  if (region.getNumArguments() != parameterTypes.size()) {
+    return op.emitOpError()
+           << "expects the '" << name
+           << "' region to have as many arguments as "
+              "bound dependent type parameters, got "
+           << region.getNumArguments() << " vs " << parameterTypes.size();
+  }
 
-    for (auto &&[i, left, right] :
-         llvm::enumerate(region.getArgumentTypes(), parameterTypes)) {
-      if (left == right)
-        continue;
-      return op.emitOpError()
-             << "expects '" << name
-             << "' region argument types to match the bound "
-                "dependent type parameters in order, mismatch at position "
-             << i << ", " << left << " vs " << right;
-    }
+  for (auto &&[i, left, right] :
+       llvm::enumerate(region.getArgumentTypes(), parameterTypes)) {
+    if (left == right)
+      continue;
+    return op.emitOpError()
+           << "expects '" << name
+           << "' region argument types to match the bound "
+              "dependent type parameters in order, mismatch at position "
+           << i << ", " << left << " vs " << right;
+  }
 
-    auto yield = dyn_cast<DepYieldOp>(region.front().getTerminator());
-    if (!yield)
-      return op.emitOpError()
-             << "expects '" << name
-             << "' region blocks to be terminated with dep.yield";
-    if (yield->getNumOperands() != 1 ||
-        !yield->getOperand(0).getType().isInteger(1))
-      return op.emitOpError() << "expects '" << name
-                              << "' region blocks to yield a single i1 value";
+  auto yield = dyn_cast<DepYieldOp>(region.front().getTerminator());
+  if (!yield)
+    return op.emitOpError()
+           << "expects '" << name
+           << "' region blocks to be terminated with dep.yield";
+  if (yield->getNumOperands() != 1 ||
+      !yield->getOperand(0).getType().isInteger(1))
+    return op.emitOpError() << "expects '" << name
+                            << "' region blocks to yield a single i1 value";
 
-    WalkResult walkResult = region.walk([](Operation *op) {
-      if (!isPure(op))
-        return WalkResult::interrupt();
-      // If the op is known to have recursive effects, no need to enter it.
-      if (op->hasTrait<OpTrait::HasRecursiveMemoryEffects>())
-        return WalkResult::skip();
-      return WalkResult::advance();
-    });
+  return verifyPureRegion(op.getOperation(), region, name);
+}
 
-    return success(!walkResult.wasInterrupted());
-  };
-  if (failed(checkAuxRegion(op.getRequires(), "requires")))
+template <typename OpTy>
+static LogicalResult verifyDepBinderAuxRegions(OpTy op, TypeRange inputTypes) {
+  if (failed(verifyDepBinderAuxRegion(op, op.getRequires(), inputTypes,
+                                      "requires")))
     return failure();
-  return checkAuxRegion(op.getEnsures(), "ensures");
+  return verifyDepBinderAuxRegion(op, op.getEnsures(), inputTypes, "ensures");
 }
 
 // Verify that types of `dep.yield` operands terminating any block in the region
@@ -127,7 +139,7 @@ static LogicalResult verifyYieldedValueTypes(Region &body,
                                              TypeRange expectedTypes,
                                              StringRef expectedDescription) {
   for (Block &block : body.getBlocks()) {
-    auto yield = dyn_cast<DepYieldOp>(block.getTerminator());
+    DepYieldOp yield = dyn_cast<DepYieldOp>(block.getTerminator());
     if (!yield)
       continue;
     if (yield.getNumOperands() != expectedTypes.size()) {
@@ -477,4 +489,238 @@ void DepFuncOp::print(OpAsmPrinter &printer) {
   if (!getBody().empty()) {
     printer.printRegion(getBody(), /*printEntryBlockArgs=*/false);
   }
+}
+
+ParseResult DepTypeConstructorOp::parse(OpAsmParser &parser,
+                                        OperationState &result) {
+  Builder builder = parser.getBuilder();
+  StringRef visibility;
+  if (succeeded(parser.parseOptionalKeyword(&visibility)))
+    result.addAttribute("sym_visibility", builder.getStringAttr(visibility));
+
+  StringAttr symbolName;
+  if (parser.parseSymbolName(symbolName, "sym_name", result.attributes))
+    return failure();
+
+  SmallVector<OpAsmParser::Argument> arguments;
+  if (parser.parseArgumentList(arguments, OpAsmParser::Delimiter::Paren,
+                               /*allowType=*/true,
+                               /*allowAttrs=*/false))
+    return failure();
+
+  SmallVector<Attribute> inputTypes = llvm::map_to_vector(
+      arguments, [&](OpAsmParser::Argument &argument) -> Attribute {
+        return TypeAttr::get(argument.type);
+      });
+  result.addAttribute("input_types", builder.getArrayAttr(inputTypes));
+
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  if (failed(parseBindsClause(
+          parser, result,
+          [&](StringRef name) -> std::optional<int64_t> {
+            for (auto &&[i, argument] : llvm::enumerate(arguments))
+              if (name == argument.ssaName.name)
+                return i;
+            return std::nullopt;
+          },
+          "a type constructor argument")))
+    return failure();
+
+  Region *
+    requires
+  = result.addRegion();
+  if (succeeded(parser.parseOptionalKeyword("requires")) &&
+      parser.parseRegion(*requires))
+    return failure();
+
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, arguments))
+    return failure();
+  return success();
+}
+
+void DepTypeConstructorOp::print(OpAsmPrinter &printer) {
+  printer << ' ';
+  if (std::optional<StringRef> visibility = getSymVisibility()) {
+    printer.printKeywordOrString(*visibility);
+    printer << ' ';
+  }
+  printer.printSymbolName(getSymName());
+  printer << '(';
+  llvm::interleaveComma(
+      getBody().front().getArguments(), printer.getStream(),
+      [&](BlockArgument argument) { printer.printRegionArgument(argument); });
+  printer << ')';
+
+  printer.printOptionalAttrDictWithKeyword(
+      getOperation()->getAttrs(),
+      {getSymNameAttrName().getValue(), getSymVisibilityAttrName().getValue(),
+       getInputTypesAttrName().getValue(), getBindsAttrName().getValue()});
+
+  printBindsClause(printer, getBinds(), [&](const Attribute &binding) {
+    ArrayAttr pair = cast<ArrayAttr>(binding);
+    int64_t position = cast<IntegerAttr>(pair[0]).getInt();
+    printer.printOperand(getBody().front().getArgument(position));
+    printer << " -> " << pair[1];
+  });
+  if (!getRequires().empty()) {
+    printer << "requires ";
+    printer.printRegion(getRequires());
+    printer.printNewline();
+  }
+  printer.printRegion(getBody(), /*printEntryBlockArgs=*/false);
+}
+
+LogicalResult DepTypeConstructorOp::verify() {
+  if (failed(verifyDepBinderOp(*this)))
+    return failure();
+
+  SmallVector<Type> inputTypes =
+      llvm::map_to_vector(getInputTypes(), [](Attribute attribute) {
+        return cast<TypeAttr>(attribute).getValue();
+      });
+  auto verifyArguments = [&](Region &region,
+                             StringRef regionName) -> LogicalResult {
+    if (region.getNumArguments() != inputTypes.size())
+      return emitOpError()
+             << "expects the '" << regionName
+             << "' region to have the same number of arguments as the type "
+                "constructor signature, got "
+             << region.getNumArguments() << " vs " << inputTypes.size();
+    for (auto &&[i, left, right] :
+         llvm::enumerate(region.getArgumentTypes(), inputTypes)) {
+      if (left != right)
+        return emitOpError()
+               << "expects '" << regionName
+               << "' region argument types to match the type constructor "
+                  "signature, mismatch at position "
+               << i << ", " << left << " vs " << right;
+    }
+    return success();
+  };
+
+  if (failed(verifyArguments(getBody(), "body")))
+    return failure();
+  if (failed(verifyDepBinderAuxRegion(*this, getRequires(), inputTypes,
+                                      "requires")))
+    return failure();
+
+  for (Block &block : getBody()) {
+    DepYieldOp yield = dyn_cast<DepYieldOp>(block.getTerminator());
+    if (!yield)
+      return emitOpError()
+             << "expects the 'body' region to be terminated with dep.yield";
+    if (yield.getNumOperands() != 1 ||
+        yield.getOperand(0).getType() != DependentTypeType::get(getContext()))
+      return emitOpError()
+             << "expects the 'body' region to yield a single !dep.type value";
+  }
+  return verifyPureRegion(getOperation(), getBody(), "body");
+}
+
+SmallVector<std::pair<Value, Attribute>> DepTypeConstructorOp::getBindings() {
+  SmallVector<std::pair<Value, Attribute>> result;
+  for (Attribute binding : getBinds().getValue()) {
+    ArrayAttr pair = cast<ArrayAttr>(binding);
+    int64_t position = cast<IntegerAttr>(pair[0]).getInt();
+    result.emplace_back(getBody().front().getArgument(position), pair[1]);
+  }
+  return result;
+}
+
+static LogicalResult verifyInsideTypeConstructor(Operation *op) {
+  if (!op->getParentOfType<DepTypeConstructorOp>())
+    return op->emitOpError()
+           << "must appear inside a dep.type.constructor operation";
+  return success();
+}
+
+LogicalResult DepTypeOp::verify() {
+  return verifyInsideTypeConstructor(getOperation());
+}
+
+LogicalResult DepTypeSumOp::verify() {
+  return verifyInsideTypeConstructor(getOperation());
+}
+
+ParseResult DepTypeProductOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand> operands;
+  SmallVector<StringRef> names;
+
+  auto parseNamedElement = [&]() -> ParseResult {
+    std::string name;
+    if (parser.parseString(&name) || parser.parseColon() ||
+        parser.parseOperand(operands.emplace_back()))
+      return failure();
+    names.push_back(parser.getBuilder().getStringAttr(name).getValue());
+    return success();
+  };
+
+  auto parseUnnamedElement = [&]() -> ParseResult {
+    if (parser.parseOperand(operands.emplace_back()))
+      return failure();
+    return success();
+  };
+
+  if (succeeded(parser.parseOptionalLBrace())) {
+    if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::None,
+                                       parseNamedElement) ||
+        parser.parseRBrace())
+      return failure();
+  } else if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::None,
+                                            parseUnnamedElement)) {
+    return failure();
+  }
+
+  Type elementType = DependentTypeType::get(parser.getContext());
+  result.addTypes(elementType);
+  if (!names.empty())
+    result.addAttribute("names", parser.getBuilder().getStrArrayAttr(names));
+
+  if (parser.resolveOperands(operands, elementType, parser.getCurrentLocation(),
+                             result.operands))
+    return failure();
+  return parser.parseOptionalAttrDictWithKeyword(result.attributes);
+}
+
+void DepTypeProductOp::print(OpAsmPrinter &printer) {
+  ArrayAttr names = getNamesAttr();
+  if (names) {
+    printer << " {";
+    printer.increaseIndent();
+    printer.printNewline();
+    llvm::interleave(
+        llvm::enumerate(getSubtypes()),
+        [&](auto element) {
+          printer << names[element.index()] << ": ";
+          printer.printOperand(element.value());
+        },
+        [&] {
+          printer << ',';
+          printer.printNewline();
+        });
+    printer.decreaseIndent();
+    printer.printNewline();
+    printer << '}';
+  } else {
+    printer << ' ';
+    llvm::interleaveComma(
+        getSubtypes(), printer.getStream(),
+        [&](Value operand) { printer.printOperand(operand); });
+  }
+  printer.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
+                                           {getNamesAttrName().getValue()});
+}
+
+LogicalResult DepTypeProductOp::verify() {
+  if (failed(verifyInsideTypeConstructor(getOperation())))
+    return failure();
+  ArrayAttr names = getNamesAttr();
+  if (names && names.size() != getSubtypes().size())
+    return emitOpError() << "expects 'names' to have " << getSubtypes().size()
+                         << " entries, but got " << names.size();
+  return success();
 }
