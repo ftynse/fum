@@ -41,7 +41,7 @@ func.func private @direct_mismatch(%szA: i32, %szB: i32) {
 
 module attributes {dep.with_dependent_types} {
 func.func @dependent_type_outside_binder() {
-  // expected-error @+1 {{dependent type used outside of the binder context}}
+  // expected-error @below {{dependent type used outside of the binder context}}
   %value = "test.out_of_thin_air"() : () -> !dep.bitvector<"size">
   return
 }
@@ -50,7 +50,7 @@ func.func @dependent_type_outside_binder() {
 // -----
 
 func.func @constructed_type_outside_binder() {
-  // expected-error @+1 {{dependent type used outside of the binder context}}
+  // expected-error @below {{dependent type used outside of the binder context}}
   %value = "test.out_of_thin_air"() : () -> !dep.constructed<@Missing()>
   return
 }

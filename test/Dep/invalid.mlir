@@ -211,7 +211,7 @@ module attributes {dep.with_dependent_types} {
 module attributes {dep.with_dependent_types} {
 dep.func @unknown_binding(%value: i32)
 binds {
-  // expected-error @+1 {{attempting to bind a value that is not a function argument}}
+  // expected-error @below {{attempting to bind a value that is not a function argument}}
   %missing -> "missing"
 }
 }
@@ -223,7 +223,7 @@ dep.func @wrong_yield_count(%value: i32) -> i32
 binds {
 }
 {
-  // expected-error @+1 {{expects the number of yielded values to match function signature, got 0 vs 1}}
+  // expected-error @below {{expects the number of yielded values to match function signature, got 0 vs 1}}
   dep.yield
 }
 }
@@ -235,7 +235,7 @@ dep.func @wrong_yield_type(%value: i32) -> i64
 binds {
 }
 {
-  // expected-error @+1 {{expects yielded value types to match function signature, mismatch at position 0, 'i32' vs 'i64'}}
+  // expected-error @below {{expects yielded value types to match function signature, mismatch at position 0, 'i32' vs 'i64'}}
   dep.yield %value : i32
 }
 }
@@ -247,7 +247,7 @@ func.func @wrong_bind_yield_count(%value: i32) {
   binds {
   }
   {
-    // expected-error @+1 {{expects the number of yielded values to match dep.bind result types, got 0 vs 1}}
+    // expected-error @below {{expects the number of yielded values to match dep.bind result types, got 0 vs 1}}
     dep.yield
   }
   return
@@ -260,7 +260,7 @@ func.func @wrong_bind_yield_type(%value: i32) {
   binds {
   }
   {
-    // expected-error @+1 {{expects yielded value types to match dep.bind result types, mismatch at position 0, 'i32' vs 'i64'}}
+    // expected-error @below {{expects yielded value types to match dep.bind result types, mismatch at position 0, 'i32' vs 'i64'}}
     dep.yield %value : i32
   }
   return
@@ -296,7 +296,7 @@ requires {
 func.func @unknown_bind_operand(%value: i32) {
   dep.bind (%value: i32)
   binds {
-    // expected-error @+1 {{attempting to bind a value that is not an operand}}
+    // expected-error @below {{attempting to bind a value that is not an operand}}
     %missing -> "missing"
   }
   return
@@ -309,7 +309,7 @@ binds {
 }
 {
   %value = dep.type i32
-  // expected-error @+1 {{expects 'names' to have 1 entries, but got 2}}
+  // expected-error @below {{expects 'names' to have 1 entries, but got 2}}
   %product = "dep.type.product"(%value) {names = ["first", "second"]}
       : (!dep.type) -> !dep.type
   dep.yield %product : !dep.type
@@ -317,7 +317,7 @@ binds {
 
 // -----
 
-// expected-error @+1 {{expects 'requires' region blocks to yield a single i1 value}}
+// expected-error @below {{expects 'requires' region blocks to yield a single i1 value}}
 dep.type.constructor @bad_requires(%N: i32)
 binds {
   %N -> "N"
@@ -334,7 +334,7 @@ requires {
 
 // -----
 
-// expected-error @+1 {{expects the 'body' region to yield a single !dep.type value}}
+// expected-error @below {{expects the 'body' region to yield a single !dep.type value}}
 dep.type.constructor @bad_body_yield(%N: i32)
 binds {
 }
@@ -348,7 +348,7 @@ requires {
 
 // -----
 
-// expected-error @+1 {{expects 'body' region to contain only pure operations}}
+// expected-error @below {{expects 'body' region to contain only pure operations}}
 dep.type.constructor @impure_body(%N: i32)
 binds {
 }
@@ -364,7 +364,7 @@ requires {
 
 // -----
 
-// expected-error @+1 {{expects 'body' region to contain only pure operations}}
+// expected-error @below {{expects 'body' region to contain only pure operations}}
 dep.type.constructor @impure_nested_bind()
 binds {
 }
@@ -383,7 +383,7 @@ binds {
 // -----
 
 func.func @type_outside_constructor() {
-  // expected-error @+1 {{must appear inside a dep.type.constructor operation}}
+  // expected-error @below {{must appear inside a dep.type.constructor operation}}
   %value = dep.type i32
   return
 }
@@ -392,7 +392,7 @@ func.func @type_outside_constructor() {
 
 func.func @type_sum_outside_constructor() {
   %element = "test.type"() : () -> !dep.type
-  // expected-error @+1 {{must appear inside a dep.type.constructor operation}}
+  // expected-error @below {{must appear inside a dep.type.constructor operation}}
   %sum = dep.type.sum %element
   return
 }
@@ -401,7 +401,7 @@ func.func @type_sum_outside_constructor() {
 
 func.func @type_product_outside_constructor() {
   %element = "test.type"() : () -> !dep.type
-  // expected-error @+1 {{must appear inside a dep.type.constructor operation}}
+  // expected-error @below {{must appear inside a dep.type.constructor operation}}
   %product = dep.type.product %element
   return
 }
