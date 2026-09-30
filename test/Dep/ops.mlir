@@ -7,11 +7,11 @@
 // CHECK-NEXT: %[[ARG0]] -> "n"
 // CHECK-NEXT: }
 // CHECK-NEXT: requires {
-// CHECK-NEXT: ^bb0(%{{.*}}: i32):
+// CHECK-NEXT: ^{{.*}}(%{{.*}}: i32):
 // CHECK: dep.yield
 // CHECK-NEXT: }
 // CHECK-NEXT: ensures {
-// CHECK-NEXT: ^bb0(%{{.*}}: i32):
+// CHECK-NEXT: ^{{.*}}(%{{.*}}: i32):
 // CHECK: dep.yield
 // CHECK-NEXT: }
 // CHECK: dep.yield
@@ -54,7 +54,7 @@ binds {
 // CHECK-NEXT: %[[REQUIRES_ARG]] -> "size"
 // CHECK-NEXT: }
 // CHECK-NEXT: requires {
-// CHECK-NEXT: ^bb0(%{{.*}}: i32):
+// CHECK-NEXT: ^{{.*}}(%{{.*}}: i32):
 // CHECK: dep.yield
 dep.func @requires_only(%size: i32)
 binds {
@@ -75,7 +75,7 @@ requires {
 // CHECK-NEXT: %[[FUNC_THIRD]] -> "third"
 // CHECK-NEXT: }
 // CHECK-NEXT: requires {
-// CHECK-NEXT: ^bb0(%{{.*}}: i32, %{{.*}}: i1):
+// CHECK-NEXT: ^{{.*}}(%{{.*}}: i32, %{{.*}}: i1):
 // CHECK: dep.yield
 dep.func @non_consecutive_func_bindings(
     %first: i32, %middle: i64, %third: i1)
@@ -126,10 +126,10 @@ binds {
 // CHECK-NEXT: %{{.*}} -> "size"
 // CHECK-NEXT: }
 // CHECK-NEXT: requires {
-// CHECK-NEXT: ^bb0(%{{.*}}: i32):
+// CHECK-NEXT: ^{{.*}}(%{{.*}}: i32):
 // CHECK: dep.yield
 // CHECK-NEXT: }
-// CHECK: ^bb0(%{{.*}}: i32):
+// CHECK: ^{{.*}}(%{{.*}}: i32):
 // CHECK: dep.yield
 // CHECK: dep.bind ()
 // CHECK: binds {
@@ -170,7 +170,7 @@ func.func @bind_cases(%size: i32, %offset: i64) {
 // CHECK-NEXT: %[[THIRD]] -> "third"
 // CHECK-NEXT: }
 // CHECK-NEXT: requires {
-// CHECK-NEXT: ^bb0(%{{.*}}: i32, %{{.*}}: i1):
+// CHECK-NEXT: ^{{.*}}(%{{.*}}: i32, %{{.*}}: i1):
 // CHECK: dep.yield
 func.func @non_consecutive_bindings(%first: i32, %middle: i64, %third: i1) {
   dep.bind (%first: i32, %middle: i64, %third: i1)
