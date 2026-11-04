@@ -19,8 +19,9 @@ def Monad_Dialect : Dialect {
   let name = "monad";
   let summary = "A dialect for monadic computations in MLIR";
   let description = [{
-    This dialect makes failure handling explicit through monadic types, such as
-    `!monad.maybe<T>`, and operations that construct monadic values.
+    This dialect expresses monadic computations: monadic types, such as
+    `!monad.maybe<T>`, operations that construct monadic values, and
+    `monad.do` regions in which `monad.bind` sequences monadic values.
   }];
   let cppNamespace = "::mlir::monad";
 

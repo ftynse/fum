@@ -18,25 +18,46 @@ using namespace mlir::monad;
 #include "fum/Dialect/Monad/IR/MonadOps.cpp.inc"
 
 //===----------------------------------------------------------------------===//
-// MonadMaybeBindOp
+// MonadBindOp
 //===----------------------------------------------------------------------===//
 
-/// Verifies that the body takes the value carried by the input and yields the
-/// result.
-LogicalResult MonadMaybeBindOp::verifyRegions() {
-  Block &body = getBody().front();
-  Type valueType = getInput().getType().getValueType();
-  if (body.getNumArguments() != 1 || body.getArgument(0).getType() != valueType)
-    return emitOpError()
-           << "expects the body to take a single argument of type "
-           << valueType;
+/// Verifies that the input is of the monad of the enclosing `monad.do` and
+/// that the successor takes one argument of each value type of the input.
+LogicalResult MonadBindOp::verify() {
+  MonadTypeInterface inputType = getInput().getType();
+  Type resultType = getParentOp().getType();
+  if (inputType.getTypeID() != resultType.getTypeID())
+    return emitOpError() << "expects the input to be of the monad of the "
+                            "enclosing monad.do, got "
+                         << inputType << " in a monad.do producing "
+                         << resultType;
 
-  auto yield = dyn_cast<MonadYieldOp>(body.back());
-  if (!yield)
-    return emitOpError() << "expects the body to be terminated by "
-                         << MonadYieldOp::getOperationName();
-  if (yield.getValue().getType() != getType())
-    return emitOpError() << "expects the body to yield " << getType()
-                         << ", got " << yield.getValue().getType();
+  ArrayRef<Type> valueTypes = inputType.getValueTypes();
+  if (getNext()->getArgumentTypes() != TypeRange(valueTypes))
+    return emitOpError() << "expects the successor to take arguments of types ("
+                         << valueTypes << ")";
+  return success();
+}
+
+/// Returns the operands passed to the successor: none are forwarded, and the
+/// bind produces one argument of each value type of the input.
+SuccessorOperands MonadBindOp::getSuccessorOperands(unsigned index) {
+  assert(index == 0 && "invalid successor index");
+  return SuccessorOperands(getInput().getType().getValueTypes().size(),
+                           MutableOperandRange(getOperation(), 0, 0));
+}
+
+//===----------------------------------------------------------------------===//
+// MonadYieldOp
+//===----------------------------------------------------------------------===//
+
+/// Verifies that the yielded value is of the result type of the enclosing
+/// `monad.do`.
+LogicalResult MonadYieldOp::verify() {
+  Type resultType = getParentOp().getType();
+  if (getValue().getType() != resultType)
+    return emitOpError() << "expects the yielded value to be of the result "
+                            "type of the enclosing monad.do, "
+                         << resultType << ", got " << getValue().getType();
   return success();
 }

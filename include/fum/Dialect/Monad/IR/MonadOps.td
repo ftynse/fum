@@ -10,6 +10,7 @@
 #define MONAD_OPS
 
 include "fum/Dialect/Monad/IR/MonadTypes.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 //===----------------------------------------------------------------------===//
@@ -18,21 +19,97 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def MonadReturnOp : Monad_Op<"return", [
     Pure,
-    TypesMatchWith<"value type matches the value type of the result",
-                   "result", "value",
-                   "::llvm::cast<::mlir::monad::MonadTypeInterface>($_self).getValueType()">]> {
-  let summary = "Wraps a value as a success";
+    RangedTypesMatchWith<"value types match the value types of the result",
+                         "result", "values",
+                         "::llvm::cast<::mlir::monad::MonadTypeInterface>($_self).getValueTypes()">]> {
+  let summary = "Wraps values into a monadic value";
   let description = [{
-    Creates a monadic value that represents a success carrying the given value.
-    The type of the value is the value type of the result.
+    Creates a monadic value from one value of each value type of the result,
+    the `return` (or `pure`) of the monad. For the maybe monad, this is a
+    success carrying the values.
 
     ```mlir
-    %m = monad.return %v : !monad.maybe<i32>
+    %m = monad.return %a, %b : !monad.maybe<i32, f32>
     ```
   }];
-  let arguments = (ins AnyType:$value);
-  let results = (outs AnyMonadType:$result);
-  let assemblyFormat = "$value attr-dict `:` qualified(type($result))";
+  let arguments = (ins Variadic<AnyType>:$values);
+  let results = (outs MonadTypeInterface:$result);
+  let assemblyFormat = "$values attr-dict `:` qualified(type($result))";
+}
+
+def MonadDoOp : Monad_Op<"do", [RecursiveMemoryEffects]> {
+  let summary = "Sequences monadic computations";
+  let description = [{
+    Runs its region, a sequence of monadic computations in the style of
+    Haskell's do-notation, and produces the monadic value it yields. Blocks
+    are continuations: `monad.bind` ends a block by binding the values of a
+    monadic value to the arguments of the next block, and `monad.yield` ends
+    the computation with its result. Every value bound in the region is of the
+    same monad as the result.
+
+    How a bind continues depends on the monad. For the maybe monad, binding a
+    success branches to the next block with the values it carries, and binding
+    a failure ends the computation with a failure.
+
+    Because a bind may leave the region, this operation does not implement
+    `RegionBranchOpInterface`, and data-flow analyses treat its result
+    conservatively.
+
+    ```mlir
+    %r = monad.do : !monad.maybe<f32> {
+      monad.bind %m, ^next : !monad.maybe<i32>
+    ^next(%x: i32):
+      %y = arith.sitofp %x : i32 to f32
+      %ok = monad.return %y : !monad.maybe<f32>
+      monad.yield %ok : !monad.maybe<f32>
+    }
+    ```
+  }];
+  let results = (outs MonadTypeInterface:$result);
+  let regions = (region MinSizedRegion<1>:$body);
+  let assemblyFormat = "attr-dict `:` qualified(type($result)) $body";
+}
+
+def MonadBindOp : Monad_Op<"bind", [
+    Terminator,
+    HasParent<"MonadDoOp">,
+    DeclareOpInterfaceMethods<BranchOpInterface>]> {
+  let summary = "Binds the values of a monadic value to the next block";
+  let description = [{
+    Continues the enclosing `monad.do` with the values of the input bound to
+    the arguments of the successor. The successor takes one argument
+    of each value type of the input. These arguments are produced by the bind,
+    which forwards no operands.
+
+    ```mlir
+    monad.bind %m, ^next : !monad.maybe<i32, f32>
+    ^next(%a: i32, %b: f32):
+    ```
+  }];
+  let arguments = (ins MonadTypeInterface:$input);
+  let successors = (successor AnySuccessor:$next);
+  let assemblyFormat = [{
+    $input `,` $next attr-dict `:` qualified(type($input))
+  }];
+  let hasVerifier = 1;
+}
+
+def MonadYieldOp : Monad_Op<"yield", [
+    Pure,
+    Terminator,
+    HasParent<"MonadDoOp">]> {
+  let summary = "Ends a monadic computation with its result";
+  let description = [{
+    Ends the region of the enclosing `monad.do`, whose result becomes the
+    yielded value.
+
+    ```mlir
+    monad.yield %m : !monad.maybe<f32>
+    ```
+  }];
+  let arguments = (ins MonadTypeInterface:$value);
+  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -50,55 +127,6 @@ def MonadMaybeFailOp : Monad_Op<"maybe.fail", [Pure]> {
   }];
   let results = (outs MonadMaybeType:$result);
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
-}
-
-def MonadMaybeBindOp : Monad_Op<"maybe.bind", [
-    RecursiveMemoryEffects,
-    SingleBlock]> {
-  let summary = "Sequences a maybe value with a computation on its value";
-  let description = [{
-    Binds the value carried by the input to the argument of the body and
-    produces the maybe value yielded by the body. If the input is a failure,
-    the body is not executed and the result is a failure.
-
-    ```mlir
-    %r = monad.maybe.bind %m : !monad.maybe<i32> -> !monad.maybe<f32> {
-    ^bb0(%x: i32):
-      %y = arith.sitofp %x : i32 to f32
-      %ok = monad.return %y : !monad.maybe<f32>
-      monad.yield %ok : !monad.maybe<f32>
-    }
-    ```
-  }];
-  let arguments = (ins MonadMaybeType:$input);
-  let results = (outs MonadMaybeType:$result);
-  let regions = (region SizedRegion<1>:$body);
-  let assemblyFormat = [{
-    $input attr-dict `:` qualified(type($input)) `->` qualified(type($result))
-    $body
-  }];
-  let hasRegionVerifier = 1;
-}
-
-//===----------------------------------------------------------------------===//
-// Terminators
-//===----------------------------------------------------------------------===//
-
-def MonadYieldOp : Monad_Op<"yield", [
-    Pure,
-    Terminator,
-    HasParent<"MonadMaybeBindOp">]> {
-  let summary = "Yields the result of a monadic computation";
-  let description = [{
-    Terminates the body of a monadic operation. The yielded value becomes the
-    result of the parent operation.
-
-    ```mlir
-    monad.yield %m : !monad.maybe<f32>
-    ```
-  }];
-  let arguments = (ins AnyMonadType:$value);
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
 }
 
 #endif // MONAD_OPS

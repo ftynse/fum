@@ -22,19 +22,16 @@ class Monad_Type<string name, string typeMnemonic, list<Trait> traits = []>
   let mnemonic = typeMnemonic;
 }
 
-def MonadMaybeType : Monad_Type<"Maybe", "maybe",
-    [MonadTypeInterface]> {
+def MonadMaybeType : Monad_Type<"Maybe", "maybe", [MonadTypeInterface]> {
   let summary = "Maybe monad type";
   let description = [{
-    A value of type `!monad.maybe<T>` is either a success carrying a value of
-    type `T`, or a failure carrying nothing.
+    A value of type `!monad.maybe<T1, ..., Tn>` is either a success carrying
+    one value of each type `T1`, ..., `Tn`, or a failure carrying nothing. The
+    list of value types may be empty.
   }];
-  let parameters = (ins "::mlir::Type":$valueType);
-  let assemblyFormat = "`<` $valueType `>`";
+  let parameters = (ins
+      OptionalArrayRefParameter<"::mlir::Type", "value types">:$valueTypes);
+  let assemblyFormat = "`<` custom<ValueTypes>($valueTypes) `>`";
 }
-
-def AnyMonadType : Type<
-    CPred<"::llvm::isa<::mlir::monad::MonadTypeInterface>($_self)">,
-    "monadic type", "::mlir::monad::MonadTypeInterface">;
 
 #endif // MONAD_TYPES

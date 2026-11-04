@@ -16,6 +16,29 @@
 using namespace mlir;
 using namespace mlir::monad;
 
+/// Parses a possibly empty comma-separated list of value types.
+static ParseResult parseValueTypes(AsmParser &parser,
+                                   SmallVector<Type> &valueTypes) {
+  Type type;
+  OptionalParseResult first = parser.parseOptionalType(type);
+  if (!first.has_value())
+    return success();
+  if (failed(*first))
+    return failure();
+  valueTypes.push_back(type);
+  while (succeeded(parser.parseOptionalComma())) {
+    if (parser.parseType(type))
+      return failure();
+    valueTypes.push_back(type);
+  }
+  return success();
+}
+
+/// Prints a comma-separated list of value types.
+static void printValueTypes(AsmPrinter &printer, ArrayRef<Type> valueTypes) {
+  llvm::interleaveComma(valueTypes, printer);
+}
+
 #define GET_TYPEDEF_CLASSES
 #include "fum/Dialect/Monad/IR/MonadOpsTypes.cpp.inc"
 
