@@ -10,12 +10,28 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
 using namespace mlir::monad;
 
 #define GET_OP_CLASSES
 #include "fum/Dialect/Monad/IR/MonadOps.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// MonadDoOp
+//===----------------------------------------------------------------------===//
+
+/// Verifies that every block except the first has exactly one predecessor.
+LogicalResult MonadDoOp::verify() {
+  for (Block &block : llvm::drop_begin(getBody())) {
+    if (!block.getSinglePredecessor())
+      return emitOpError()
+             << "expects every block except the first to have exactly one "
+                "predecessor";
+  }
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // MonadBindOp

@@ -69,3 +69,14 @@ func.func @bind_values(%pair: !monad.maybe<i32, i32>, %guard: !monad.maybe<>)
   }
   return %result : !monad.maybe<i32>
 }
+
+// A single-block computation needs no predecessor for its entry block.
+// CHECK-LABEL: func.func @do_single_block
+// CHECK: monad.do : !monad.maybe<i32> {
+// CHECK: monad.yield %{{.*}} : !monad.maybe<i32>
+func.func @do_single_block(%input: !monad.maybe<i32>) -> !monad.maybe<i32> {
+  %result = monad.do : !monad.maybe<i32> {
+    monad.yield %input : !monad.maybe<i32>
+  }
+  return %result : !monad.maybe<i32>
+}
