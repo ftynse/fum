@@ -6,6 +6,8 @@ set(LIBS
     MLIRDepDialect
     MLIRDepInterfaces
     MLIRDepTransforms
+    MLIRMonadDialect
+    MLIRTransformDialect
   )
 add_llvm_executable(fum-opt fum-opt.cpp)
 

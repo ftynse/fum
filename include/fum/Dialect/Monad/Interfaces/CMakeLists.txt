@@ -1,0 +1,5 @@
+set(LLVM_TARGET_DEFINITIONS MonadTypeInterfaces.td)
+mlir_tablegen(MonadTypeInterfaces.h.inc -gen-type-interface-decls)
+mlir_tablegen(MonadTypeInterfaces.cpp.inc -gen-type-interface-defs)
+add_mlir_dialect_tablegen_target(MLIRMonadTypeInterfacesIncGen)
+add_mlir_doc(MonadTypeInterfaces MonadTypeInterfaces Monad/ -gen-type-interface-docs)
