@@ -25,8 +25,8 @@ def MonadReturnOp : Monad_Op<"return", [
   let summary = "Wraps values into a monadic value";
   let description = [{
     Creates a monadic value from one value of each value type of the result,
-    the `return` (or `pure`) of the monad. For the maybe monad, this is a
-    success carrying the values.
+    the `return` (or `pure`) of the monad. For the maybe monad, this is
+    `some` value carrying the values.
 
     ```mlir
     %m = monad.return %a, %b : !monad.maybe<i32, f32>
@@ -47,9 +47,9 @@ def MonadDoOp : Monad_Op<"do", [RecursiveMemoryEffects]> {
     the computation with its result. Every value bound in the region is of the
     same monad as the result.
 
-    How a bind continues depends on the monad. For the maybe monad, binding a
-    success branches to the next block with the values it carries, and binding
-    a failure ends the computation with a failure.
+    How a bind continues depends on the monad. For the maybe monad, binding
+    `some` value branches to the next block with the values it carries, and
+    binding `none` ends the computation with `none`.
 
     Because a bind may leave the region, this operation does not implement
     `RegionBranchOpInterface`, and data-flow analyses treat its result
@@ -116,13 +116,13 @@ def MonadYieldOp : Monad_Op<"yield", [
 // Maybe operations
 //===----------------------------------------------------------------------===//
 
-def MonadMaybeFailOp : Monad_Op<"maybe.fail", [Pure]> {
-  let summary = "Creates a maybe failure";
+def MonadMaybeNoneOp : Monad_Op<"maybe.none", [Pure]> {
+  let summary = "Creates the maybe value that carries no value";
   let description = [{
-    Creates a maybe value that represents a failure, which carries no value.
+    Creates `none`, the maybe value that carries no value.
 
     ```mlir
-    %m = monad.maybe.fail : !monad.maybe<i32>
+    %m = monad.maybe.none : !monad.maybe<i32>
     ```
   }];
   let results = (outs MonadMaybeType:$result);

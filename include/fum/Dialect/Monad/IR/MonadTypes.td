@@ -25,9 +25,9 @@ class Monad_Type<string name, string typeMnemonic, list<Trait> traits = []>
 def MonadMaybeType : Monad_Type<"Maybe", "maybe", [MonadTypeInterface]> {
   let summary = "Maybe monad type";
   let description = [{
-    A value of type `!monad.maybe<T1, ..., Tn>` is either a success carrying
-    one value of each type `T1`, ..., `Tn`, or a failure carrying nothing. The
-    list of value types may be empty.
+    A value of type `!monad.maybe<T1, ..., Tn>` is either `some` value
+    carrying one value of each type `T1`, ..., `Tn`, or `none`, which carries
+    nothing. The list of value types may be empty.
   }];
   let parameters = (ins
       OptionalArrayRefParameter<"::mlir::Type", "value types">:$valueTypes);

@@ -32,8 +32,8 @@ LogicalResult MonadBindOp::verify() {
                          << inputType << " in a monad.do producing "
                          << resultType;
 
-  ArrayRef<Type> valueTypes = inputType.getValueTypes();
-  if (getNext()->getArgumentTypes() != TypeRange(valueTypes))
+  TypeRange valueTypes = inputType.getValueTypes();
+  if (getNext()->getArgumentTypes() != valueTypes)
     return emitOpError() << "expects the successor to take arguments of types ("
                          << valueTypes << ")";
   return success();

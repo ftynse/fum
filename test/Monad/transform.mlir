@@ -3,7 +3,7 @@
 // The transform script of the Transform dialect tutorial
 // (mlir/test/Examples/transform/Ch1/sequence.mlir) written with the maybe
 // monad. Each transform operation returns its handles in one maybe value,
-// which fails if the operation fails.
+// which is `none` if the operation fails.
 
 !any = !transform.any_op
 !handles = !monad.maybe<!any, !any>

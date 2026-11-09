@@ -22,11 +22,11 @@ func.func @wrap_values(%a: i32, %b: f32)
   return %values, %nothing : !monad.maybe<i32, f32>, !monad.maybe<>
 }
 
-// Create a maybe failure.
-// CHECK-LABEL: func.func @maybe_failure
-// CHECK: monad.maybe.fail : !monad.maybe<f32>
-func.func @maybe_failure() -> !monad.maybe<f32> {
-  %result = monad.maybe.fail : !monad.maybe<f32>
+// Create the maybe value that carries no value.
+// CHECK-LABEL: func.func @maybe_none
+// CHECK: monad.maybe.none : !monad.maybe<f32>
+func.func @maybe_none() -> !monad.maybe<f32> {
+  %result = monad.maybe.none : !monad.maybe<f32>
   return %result : !monad.maybe<f32>
 }
 

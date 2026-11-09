@@ -41,17 +41,17 @@ func.func @return_unqualified_type(%value: i32) {
 
 // -----
 
-func.func @maybe_fail_not_maybe() {
+func.func @maybe_none_not_maybe() {
   // expected-error @below {{result #0 must be Maybe monad type, but got 'i32'}}
-  %result = "monad.maybe.fail"() : () -> i32
+  %result = "monad.maybe.none"() : () -> i32
   return
 }
 
 // -----
 
-func.func @maybe_fail_with_operand(%error: i8) {
+func.func @maybe_none_with_operand(%error: i8) {
   // expected-error @below {{requires zero operands}}
-  %result = "monad.maybe.fail"(%error) : (i8) -> !monad.maybe<i32>
+  %result = "monad.maybe.none"(%error) : (i8) -> !monad.maybe<i32>
   return
 }
 
@@ -95,8 +95,8 @@ func.func @bind_input_not_monadic(%input: i32) {
     // expected-error @below {{operand #0 must be MonadTypeInterface instance, but got 'i32'}}
     "monad.bind"(%input) [^next] : (i32) -> ()
   ^next(%value: i32):
-    %failure = monad.maybe.fail : !monad.maybe<i32>
-    monad.yield %failure : !monad.maybe<i32>
+    %none = monad.maybe.none : !monad.maybe<i32>
+    monad.yield %none : !monad.maybe<i32>
   }
   return
 }
@@ -108,8 +108,8 @@ func.func @bind_successor_type_mismatch(%input: !monad.maybe<i32>) {
     // expected-error @below {{expects the successor to take arguments of types ('i32')}}
     monad.bind %input, ^next : !monad.maybe<i32>
   ^next(%value: f32):
-    %failure = monad.maybe.fail : !monad.maybe<i32>
-    monad.yield %failure : !monad.maybe<i32>
+    %none = monad.maybe.none : !monad.maybe<i32>
+    monad.yield %none : !monad.maybe<i32>
   }
   return
 }
@@ -121,8 +121,8 @@ func.func @bind_successor_count_mismatch(%input: !monad.maybe<i32, i32>) {
     // expected-error @below {{branch has 2 operands for successor #0, but target block has 1}}
     monad.bind %input, ^next : !monad.maybe<i32, i32>
   ^next(%value: i32):
-    %failure = monad.maybe.fail : !monad.maybe<i32>
-    monad.yield %failure : !monad.maybe<i32>
+    %none = monad.maybe.none : !monad.maybe<i32>
+    monad.yield %none : !monad.maybe<i32>
   }
   return
 }
@@ -159,7 +159,7 @@ func.func @yield_type_mismatch(%input: !monad.maybe<i32>) {
 func.func @do_block_without_terminator(%input: !monad.maybe<i32>) {
   %result = monad.do : !monad.maybe<i32> {
     // expected-error @below {{block with no terminator}}
-    %failure = monad.maybe.fail : !monad.maybe<i32>
+    %none = monad.maybe.none : !monad.maybe<i32>
   }
   return
 }

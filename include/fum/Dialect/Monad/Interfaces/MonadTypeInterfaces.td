@@ -25,7 +25,7 @@ def MonadTypeInterface : TypeInterface<"MonadTypeInterface"> {
       /*desc=*/[{
         Returns the value types to which the type constructor is applied.
       }],
-      /*returnType=*/"::llvm::ArrayRef<::mlir::Type>",
+      /*returnType=*/"::mlir::TypeRange",
       /*name=*/"getValueTypes",
       /*arguments=*/(ins)
     >
