@@ -46,7 +46,8 @@ def MonadDoOp : Monad_Op<"do", [RecursiveMemoryEffects]> {
     monadic value to the arguments of the next block, and `monad.yield` ends
     the computation with its result. Every value bound in the region is of the
     same monad as the result. Every block except the first must have exactly
-    one predecessor.
+    one predecessor. Every block must end with a terminator from the monad
+    dialect.
 
     How a bind continues depends on the monad. For the maybe monad, binding
     `some` value branches to the next block with the values it carries, and
@@ -68,7 +69,7 @@ def MonadDoOp : Monad_Op<"do", [RecursiveMemoryEffects]> {
   }];
   let results = (outs MonadTypeInterface:$result);
   let regions = (region MinSizedRegion<1>:$body);
-  let hasVerifier = 1;
+  let hasRegionVerifier = 1;
   let assemblyFormat = "attr-dict `:` qualified(type($result)) $body";
 }
 
