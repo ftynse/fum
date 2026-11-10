@@ -9,6 +9,7 @@
 #ifndef FUM_DIALECT_MONAD_IR_MONADTYPES_H
 #define FUM_DIALECT_MONAD_IR_MONADTYPES_H
 
+#include "fum/Dialect/Monad/IR/MonadAttrs.h"
 #include "fum/Dialect/Monad/Interfaces/MonadTypeInterfaces.h"
 #include "mlir/IR/BuiltinTypes.h"
 

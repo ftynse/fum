@@ -21,5 +21,6 @@ void MonadDialect::initialize() {
 #define GET_OP_LIST
 #include "fum/Dialect/Monad/IR/MonadOps.cpp.inc"
       >();
+  registerAttributes();
   registerTypes();
 }

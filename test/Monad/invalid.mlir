@@ -213,3 +213,49 @@ func.func @do_continuation_with_foreign_terminator(%input: !monad.maybe<>) {
   }
   return
 }
+
+// -----
+
+// expected-error @below {{expects a non-empty error name}}
+func.func private @error_with_empty_name() attributes {error = #monad.error<"">}
+
+// -----
+
+// expected-error @below {{expected distinct errors, got #monad.error<"a"> twice}}
+func.func private @either_with_duplicate_error(!monad.either<[i32] throws {#monad.error<"a">, #monad.error<"a">}>)
+
+// -----
+
+// expected-error @below {{expected an error, got 1 : i32}}
+func.func private @either_with_non_error(!monad.either<[i32] throws {1 : i32}>)
+
+// -----
+
+// expected-error @below {{expected 'throws'}}
+func.func private @either_without_errors(!monad.either<[i32]>)
+
+// -----
+
+func.func @bind_other_errors(%input: !monad.either<[i32] throws {#monad.error<"a">}>) {
+  %result = monad.do : !monad.either<[i32] throws {#monad.error<"b">}> {
+    // expected-error @below {{expects the input to be of the monad of the enclosing monad.do}}
+    monad.bind %input, ^next : !monad.either<[i32] throws {#monad.error<"a">}>
+  ^next(%value: i32):
+    %wrapped = monad.return %value : !monad.either<[i32] throws {#monad.error<"b">}>
+    monad.yield %wrapped : !monad.either<[i32] throws {#monad.error<"b">}>
+  }
+  return
+}
+
+// -----
+
+func.func @bind_maybe_in_either(%input: !monad.maybe<i32>) {
+  %result = monad.do : !monad.either<[i32] throws {#monad.error<"a">}> {
+    // expected-error @below {{expects the input to be of the monad of the enclosing monad.do}}
+    monad.bind %input, ^next : !monad.maybe<i32>
+  ^next(%value: i32):
+    %wrapped = monad.return %value : !monad.either<[i32] throws {#monad.error<"a">}>
+    monad.yield %wrapped : !monad.either<[i32] throws {#monad.error<"a">}>
+  }
+  return
+}

@@ -80,3 +80,57 @@ func.func @do_single_block(%input: !monad.maybe<i32>) -> !monad.maybe<i32> {
   }
   return %result : !monad.maybe<i32>
 }
+
+// Error used by the either tests.
+#overflow_err = #monad.error<"overflow">
+
+// Round-trip the error attribute.
+// CHECK-LABEL: func.func private @error_attr
+// CHECK-SAME: error = #monad.error<"overflow">
+func.func private @error_attr() attributes {error = #overflow_err}
+
+// Round-trip the either type with one, several, no, and nested value types,
+// and with one, several, and no errors.
+// CHECK-LABEL: func.func private @either_types
+// CHECK-SAME: !monad.either<[i32] throws {#monad.error<"overflow">}>
+// CHECK-SAME: !monad.either<[i8, i32] throws {#monad.error<"div_by_zero">, #monad.error<"overflow">}>
+// CHECK-SAME: !monad.either<[] throws {#monad.error<"overflow">}>
+// CHECK-SAME: !monad.either<[i32] throws {}>
+// CHECK-SAME: !monad.either<[!monad.maybe<i32>] throws {#monad.error<"overflow">}>
+func.func private @either_types(
+    !monad.either<[i32] throws {#overflow_err}>,
+    !monad.either<[i8, i32] throws {#monad.error<"div_by_zero">, #overflow_err}>,
+    !monad.either<[] throws {#overflow_err}>,
+    !monad.either<[i32] throws {}>,
+    !monad.either<[!monad.maybe<i32>] throws {#overflow_err}>)
+
+// The errors are a set: they are printed sorted by name, whatever their order
+// in the input.
+// CHECK-LABEL: func.func private @either_error_order
+// CHECK-SAME: throws {#monad.error<"a">, #monad.error<"b">}
+func.func private @either_error_order(
+    !monad.either<[i32] throws {#monad.error<"b">, #monad.error<"a">}>)
+
+// Wrap a value as a success of the either monad.
+// CHECK-LABEL: func.func @either_return
+// CHECK: monad.return %{{.*}} : !monad.either<[i32] throws {#monad.error<"overflow">}>
+func.func @either_return(%value: i32) -> !monad.either<[i32] throws {#overflow_err}> {
+  %result = monad.return %value : !monad.either<[i32] throws {#overflow_err}>
+  return %result : !monad.either<[i32] throws {#overflow_err}>
+}
+
+// Bind an either value in a do with the same errors and other value types.
+// CHECK: monad.do : !monad.either<[f32] throws {#monad.error<"overflow">}>
+// CHECK: monad.bind %{{.*}}, ^[[NEXT:.+]] : !monad.either<[i32] throws {#monad.error<"overflow">}>
+// CHECK: ^[[NEXT]](%{{.*}}: i32):
+func.func @either_bind(%input: !monad.either<[i32] throws {#overflow_err}>)
+    -> !monad.either<[f32] throws {#overflow_err}> {
+  %result = monad.do : !monad.either<[f32] throws {#overflow_err}> {
+    monad.bind %input, ^next : !monad.either<[i32] throws {#overflow_err}>
+  ^next(%value: i32):
+    %converted = arith.sitofp %value : i32 to f32
+    %wrapped = monad.return %converted : !monad.either<[f32] throws {#overflow_err}>
+    monad.yield %wrapped : !monad.either<[f32] throws {#overflow_err}>
+  }
+  return %result : !monad.either<[f32] throws {#overflow_err}>
+}
