@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "fum/Dialect/Monad/IR/MonadOps.h"
+#include "fum/Dialect/Monad/IR/MonadDialect.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
@@ -22,13 +23,18 @@ using namespace mlir::monad;
 // MonadDoOp
 //===----------------------------------------------------------------------===//
 
-/// Verifies that every block except the first has exactly one predecessor.
-LogicalResult MonadDoOp::verify() {
+/// Verifies block predecessors and that all terminators belong to Monad.
+LogicalResult MonadDoOp::verifyRegions() {
   for (Block &block : llvm::drop_begin(getBody())) {
     if (!block.getSinglePredecessor())
       return emitOpError()
              << "expects every block except the first to have exactly one "
                 "predecessor";
+  }
+  for (Block &block : getBody()) {
+    if (!isa_and_nonnull<MonadDialect>(block.getTerminator()->getDialect()))
+      return emitOpError()
+             << "expects every block terminator to belong to the monad dialect";
   }
   return success();
 }
