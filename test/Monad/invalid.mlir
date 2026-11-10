@@ -163,3 +163,29 @@ func.func @do_block_without_terminator(%input: !monad.maybe<i32>) {
   }
   return
 }
+
+// -----
+
+// Reject a non-entry block without a predecessor.
+func.func @do_block_without_predecessor(%input: !monad.maybe<i32>) {
+  // expected-error @below {{expects every block except the first to have exactly one predecessor}}
+  %result = monad.do : !monad.maybe<i32> {
+    monad.yield %input : !monad.maybe<i32>
+  ^unreachable:
+    monad.yield %input : !monad.maybe<i32>
+  }
+  return
+}
+
+// -----
+
+// Reject a block reached by both the entry block and a backedge.
+func.func @do_block_with_multiple_predecessors(%input: !monad.maybe<>) {
+  // expected-error @below {{expects every block except the first to have exactly one predecessor}}
+  %result = monad.do : !monad.maybe<> {
+    monad.bind %input, ^loop : !monad.maybe<>
+  ^loop:
+    monad.bind %input, ^loop : !monad.maybe<>
+  }
+  return
+}
