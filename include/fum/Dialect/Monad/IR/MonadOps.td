@@ -45,7 +45,8 @@ def MonadDoOp : Monad_Op<"do", [RecursiveMemoryEffects]> {
     are continuations: `monad.bind` ends a block by binding the values of a
     monadic value to the arguments of the next block, and `monad.yield` ends
     the computation with its result. Every value bound in the region is of the
-    same monad as the result. Every block except the first must have exactly
+    same monad as the result: its type is the result type up to the value
+    types. Every block except the first must have exactly
     one predecessor. Every block must end with a terminator from the monad
     dialect.
 

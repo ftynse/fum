@@ -26,7 +26,10 @@ def Monad_Dialect : Dialect {
   let cppNamespace = "::mlir::monad";
 
   let useDefaultTypePrinterParser = 1;
+  let useDefaultAttributePrinterParser = 1;
   let extraClassDeclaration = [{
+    /// Registers the attributes of the dialect.
+    void registerAttributes();
     /// Registers the types of the dialect.
     void registerTypes();
   }];

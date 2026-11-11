@@ -43,12 +43,13 @@ LogicalResult MonadDoOp::verifyRegions() {
 // MonadBindOp
 //===----------------------------------------------------------------------===//
 
-/// Verifies that the input is of the monad of the enclosing `monad.do` and
-/// that the successor takes one argument of each value type of the input.
+/// Verifies that the input is of the monad of the enclosing `monad.do`, that
+/// is, of its result type up to the value types, and that the successor takes
+/// one argument of each value type of the input.
 LogicalResult MonadBindOp::verify() {
   MonadTypeInterface inputType = getInput().getType();
-  Type resultType = getParentOp().getType();
-  if (inputType.getTypeID() != resultType.getTypeID())
+  MonadTypeInterface resultType = getParentOp().getType();
+  if (inputType.cloneWithValueTypes(resultType.getValueTypes()) != resultType)
     return emitOpError() << "expects the input to be of the monad of the "
                             "enclosing monad.do, got "
                          << inputType << " in a monad.do producing "

@@ -1,4 +1,5 @@
 add_mlir_dialect_library(MLIRMonadDialect
+  MonadAttrs.cpp
   MonadDialect.cpp
   MonadOps.cpp
   MonadTypes.cpp
@@ -7,6 +8,7 @@ add_mlir_dialect_library(MLIRMonadDialect
   ${PROJECT_SOURCE_DIR}/include/
 
   DEPENDS
+  MLIRMonadAttrsIncGen
   MLIRMonadOpsIncGen
   MLIRMonadTypeInterfacesIncGen
 
