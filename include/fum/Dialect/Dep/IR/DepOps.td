@@ -243,5 +243,92 @@ def DepCheckTypeParamsEqual : Dep_Op<"check_type_params_equal"> {
                        TypeAttrOf<DepBitVectorType>:$rhs);
 }
 
+// bitvector ops --------------------------------------------------------------------
+
+def Bitvector_Zext : Dep_Op<"bitvector.zext"> {
+	let summary = "Lengthens the input bitvector by padding zeros next to the MSB.";
+	let description = [{"Lengthens the input bitvector by padding zeros next to the MSB"}];
+
+	let arguments = (ins
+		DepBitVectorType:$value,
+		SignlessIntegerOrIndexLike:$out_width
+	);
+
+	let results = (outs DepBitVectorType);
+}
+
+def Bitvector_Zeros : Dep_Op<"bitvector.zeros"> {
+	let summary = "Returns a fully reset bitvector of the given length";
+
+	let arguments = (ins
+		SignlessIntegerOrIndexLike:$out_width
+	);
+
+	let results = (outs DepBitVectorType);
+}
+
+def Bitvector_Ones : Dep_Op<"bitvector.ones"> {
+	let summary = "Returns a fully set bitvector of the given length";
+
+	let arguments = (ins
+		SignlessIntegerOrIndexLike:$out_width
+	);
+
+	let results = (outs DepBitVectorType);
+}
+
+def Bitvector_Empty : Dep_Op<"bitvector.empty"> {
+	let summary = "Checks if a bitvector is empty";
+
+	let arguments = (ins
+		SignlessIntegerOrIndexLike:$out_width
+	);
+
+	let results = (outs I1);
+}
+
+def Bitvector_Shl : Dep_Op<"bitvector.shl"> {
+	let summary = "Shifts a bitvector left and fills with zeros on the right";
+
+	let arguments = (ins
+		DepBitVectorType:$value,
+		SignlessIntegerOrIndexLike:$out_width
+	);
+
+	let results = (outs DepBitVectorType);
+}
+
+def Bitvector_Shr : Dep_Op<"bitvector.shr"> {
+	let summary = "Shifts a bitvector right and fills with zeros on the left";
+
+	let arguments = (ins
+		DepBitVectorType:$value,
+		SignlessIntegerOrIndexLike:$out_width
+	);
+
+	let results = (outs DepBitVectorType);
+}
+
+def Bitvector_Or : Dep_Op<"bitvector.or"> {
+	let summary = "Bitwise OR between two bitvectors";
+
+	let arguments = (ins
+		DepBitVectorType:$x1,
+		DepBitVectorType:$x2
+	);
+
+	let results = (outs DepBitVectorType);
+}
+
+def Bitvector_RotateRight : Dep_Op<"bitvector.ror"> {
+	let summary = "Bitvector right rotate";
+
+	let arguments = (ins
+		DepBitVectorType:$x2,
+		SignlessIntegerOrIndexLike:$out_width
+	);
+
+	let results = (outs DepBitVectorType);
+}
 
 #endif // DEP_OPS
