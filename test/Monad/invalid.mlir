@@ -245,8 +245,7 @@ func.func @either_branch_wrong_left(%input: !monad.either<i32, f32>) {
 
 // -----
 
-// A left ends the do, so the input of a bind must have the left type of the
-// do; only the right types may differ.
+// A bound either must have the left type of the do.
 func.func @either_bind_other_left(%input: !monad.either<i64, f32>) -> !monad.either<i32, f32> {
   %result = monad.do : !monad.either<i32, f32> {
     // expected-error @below {{expects the input to be of the monad of the enclosing monad.do, got '!monad.either<i64, f32>' in a monad.do producing '!monad.either<i32, f32>'}}

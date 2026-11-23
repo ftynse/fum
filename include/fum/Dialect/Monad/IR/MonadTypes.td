@@ -33,7 +33,7 @@ def MonadMaybeType : Monad_Type<"Maybe", "maybe", [MonadTypeInterface]> {
       OptionalArrayRefParameter<"::mlir::Type", "value types">:$valueTypes);
   let assemblyFormat = "`<` custom<ValueTypes>($valueTypes) `>`";
   let extraClassDeclaration = [{
-    /// Returns the maybe type with the given value types.
+    /// Returns this type with the given value types.
     MonadTypeInterface cloneWithValueTypes(::mlir::TypeRange valueTypes) const;
   }];
 }
@@ -43,21 +43,11 @@ def MonadEitherType : Monad_Type<"Either", "either", [MonadTypeInterface]> {
   let description = [{
     A value of type `!monad.either<L, R1, ..., Rn>` is either a left carrying
     one value of type `L`, or a right carrying one value of each type `R1`,
-    ..., `Rn`. It has exactly two constructors, as Haskell's `Either`: a left
-    may hold any type, not only an error. The right types are the value types
-    of the monad. Both sides are always written: a right that carries nothing
-    is written `none`, as in Haskell's `Either L ()`, and `none` cannot
-    appear among other right types.
-
-    `monad.return` creates a right and `monad.either.left` a left.
-    `monad.bind` continues on a right and ends the enclosing `monad.do` with
-    a left, so its input must have the left type of the `monad.do`.
-    `monad.either.branch` branches on the side.
+    ..., `Rn`, the value types of the monad. A right carrying nothing is
+    written `none`.
 
     ```mlir
-    // Either an i32 error code, or an f32.
     !monad.either<i32, f32>
-    // Either an i32 error code, or nothing.
     !monad.either<i32, none>
     ```
   }];
@@ -67,8 +57,7 @@ def MonadEitherType : Monad_Type<"Either", "either", [MonadTypeInterface]> {
   let assemblyFormat = "`<` $leftType `,` custom<RightTypes>($valueTypes) `>`";
   let genVerifyDecl = 1;
   let extraClassDeclaration = [{
-    /// Returns the either type with the given value types and the left type
-    /// of this type.
+    /// Returns this type with the given value types.
     MonadTypeInterface cloneWithValueTypes(::mlir::TypeRange valueTypes) const;
   }];
 }

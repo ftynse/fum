@@ -52,8 +52,8 @@ def MonadDoOp : Monad_Op<"do", [RecursiveMemoryEffects]> {
     How a bind continues depends on the monad. For the maybe monad, binding
     `some` value branches to the next block with the values it carries, and
     binding `none` ends the computation with `none`. For the either monad,
-    binding a right branches to the next block with the values it carries,
-    and binding a left ends the computation with that left.
+    binding a right continues with its values, and binding a left ends the
+    computation with it.
 
     Because a bind may leave the region, this operation does not implement
     `RegionBranchOpInterface`, and data-flow analyses treat its result
@@ -162,11 +162,7 @@ def MonadEitherBranchOp : Monad_Op<"either.branch", [
   let summary = "Branches on the side of an either value";
   let description = [{
     Branches to `left` with the value of a left, and to `right` with the
-    values of a right. The `left` successor takes one argument of the left
-    type, and the `right` successor one argument of each value type. These
-    arguments are produced by the branch, which forwards no operands. Unlike
-    `monad.bind`, both sides continue, so the branch can also end a block
-    outside a `monad.do`.
+    values of a right.
 
     ```mlir
     monad.either.branch %m, left ^l, right ^r : !monad.either<i32, f32>
