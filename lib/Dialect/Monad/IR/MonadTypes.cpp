@@ -39,8 +39,67 @@ static void printValueTypes(AsmPrinter &printer, ArrayRef<Type> valueTypes) {
   llvm::interleaveComma(valueTypes, printer);
 }
 
+/// Parses the value types of the right side of an either type: a non-empty
+/// comma-separated list of types, where `none` alone stands for no value
+/// types.
+static ParseResult parseRightTypes(AsmParser &parser,
+                                   SmallVector<Type> &valueTypes) {
+  SMLoc loc = parser.getCurrentLocation();
+  if (parser.parseCommaSeparatedList(
+          [&]() { return parser.parseType(valueTypes.emplace_back()); }))
+    return failure();
+  if (valueTypes.size() == 1 && isa<NoneType>(valueTypes.front())) {
+    valueTypes.clear();
+    return success();
+  }
+  if (llvm::any_of(valueTypes, llvm::IsaPred<NoneType>))
+    return parser.emitError(loc)
+           << "expects 'none' to be the only right type of an either type";
+  return success();
+}
+
+/// Prints the value types of the right side of an either type, or `none` if
+/// there are none.
+static void printRightTypes(AsmPrinter &printer, ArrayRef<Type> valueTypes) {
+  if (valueTypes.empty()) {
+    printer << "none";
+    return;
+  }
+  llvm::interleaveComma(valueTypes, printer);
+}
+
 #define GET_TYPEDEF_CLASSES
 #include "fum/Dialect/Monad/IR/MonadOpsTypes.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// MaybeType
+//===----------------------------------------------------------------------===//
+
+/// Returns the maybe type with the given value types.
+MonadTypeInterface MaybeType::cloneWithValueTypes(TypeRange valueTypes) const {
+  return MaybeType::get(getContext(), llvm::to_vector(valueTypes));
+}
+
+//===----------------------------------------------------------------------===//
+// EitherType
+//===----------------------------------------------------------------------===//
+
+/// Returns the either type with the given value types and the left type of
+/// this type.
+MonadTypeInterface EitherType::cloneWithValueTypes(TypeRange valueTypes) const {
+  return EitherType::get(getContext(), getLeftType(),
+                         llvm::to_vector(valueTypes));
+}
+
+/// Verifies that no value type is `none`, which is printed for an empty list
+/// of value types.
+LogicalResult EitherType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 Type leftType, ArrayRef<Type> valueTypes) {
+  if (llvm::any_of(valueTypes, llvm::IsaPred<NoneType>))
+    return emitError() << "expects no 'none' value type; an either type "
+                          "without value types is written with 'none'";
+  return success();
+}
 
 void MonadDialect::registerTypes() {
   addTypes<

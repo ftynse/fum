@@ -28,6 +28,15 @@ def MonadTypeInterface : TypeInterface<"MonadTypeInterface"> {
       /*returnType=*/"::mlir::TypeRange",
       /*name=*/"getValueTypes",
       /*arguments=*/(ins)
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Returns this monadic type with its value types replaced by
+        `valueTypes`, keeping every other parameter of the type.
+      }],
+      /*returnType=*/"::mlir::monad::MonadTypeInterface",
+      /*name=*/"cloneWithValueTypes",
+      /*arguments=*/(ins "::mlir::TypeRange":$valueTypes)
     >
   ];
 }

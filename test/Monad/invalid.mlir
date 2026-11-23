@@ -213,3 +213,47 @@ func.func @do_continuation_with_foreign_terminator(%input: !monad.maybe<>) {
   }
   return
 }
+
+// -----
+
+// expected-error @below {{expected ','}}
+func.func private @either_without_right(!monad.either<i32>)
+
+// -----
+
+// expected-error @below {{expects 'none' to be the only right type of an either type}}
+func.func private @either_none_among_right_types(!monad.either<i32, f32, none>)
+
+// -----
+
+func.func @either_left_wrong_type(%value: i64) {
+  // expected-error @below {{failed to verify that value type matches the left type of the result}}
+  %left = "monad.either.left"(%value) : (i64) -> !monad.either<i32, none>
+  return
+}
+
+// -----
+
+func.func @either_branch_wrong_left(%input: !monad.either<i32, f32>) {
+  // expected-error @below {{expects the left successor to take one argument of type 'i32'}}
+  monad.either.branch %input, left ^left, right ^right : !monad.either<i32, f32>
+^left(%error: i64):
+  return
+^right(%value: f32):
+  return
+}
+
+// -----
+
+// A left ends the do, so the input of a bind must have the left type of the
+// do; only the right types may differ.
+func.func @either_bind_other_left(%input: !monad.either<i64, f32>) -> !monad.either<i32, f32> {
+  %result = monad.do : !monad.either<i32, f32> {
+    // expected-error @below {{expects the input to be of the monad of the enclosing monad.do, got '!monad.either<i64, f32>' in a monad.do producing '!monad.either<i32, f32>'}}
+    monad.bind %input, ^next : !monad.either<i64, f32>
+  ^next(%value: f32):
+    %success = monad.return %value : !monad.either<i32, f32>
+    monad.yield %success : !monad.either<i32, f32>
+  }
+  return %result : !monad.either<i32, f32>
+}

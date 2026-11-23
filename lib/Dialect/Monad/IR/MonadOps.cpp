@@ -43,12 +43,13 @@ LogicalResult MonadDoOp::verifyRegions() {
 // MonadBindOp
 //===----------------------------------------------------------------------===//
 
-/// Verifies that the input is of the monad of the enclosing `monad.do` and
-/// that the successor takes one argument of each value type of the input.
+/// Verifies that the input is of the monad of the enclosing `monad.do`, the
+/// result type up to the value types, and that the successor takes one
+/// argument of each value type of the input.
 LogicalResult MonadBindOp::verify() {
   MonadTypeInterface inputType = getInput().getType();
-  Type resultType = getParentOp().getType();
-  if (inputType.getTypeID() != resultType.getTypeID())
+  MonadTypeInterface resultType = getParentOp().getType();
+  if (inputType.cloneWithValueTypes(resultType.getValueTypes()) != resultType)
     return emitOpError() << "expects the input to be of the monad of the "
                             "enclosing monad.do, got "
                          << inputType << " in a monad.do producing "
@@ -82,4 +83,32 @@ LogicalResult MonadYieldOp::verify() {
                             "type of the enclosing monad.do, "
                          << resultType << ", got " << getValue().getType();
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// MonadEitherBranchOp
+//===----------------------------------------------------------------------===//
+
+/// Verifies that the left successor takes one argument of the left type and
+/// the right successor one argument of each value type.
+LogicalResult MonadEitherBranchOp::verify() {
+  EitherType inputType = getInput().getType();
+  if (getLeft()->getArgumentTypes() != TypeRange(inputType.getLeftType()))
+    return emitOpError() << "expects the left successor to take one argument "
+                            "of type "
+                         << inputType.getLeftType();
+  if (getRight()->getArgumentTypes() != TypeRange(inputType.getValueTypes()))
+    return emitOpError()
+           << "expects the right successor to take arguments of types ("
+           << inputType.getValueTypes() << ")";
+  return success();
+}
+
+/// Returns the operands passed to a successor: none are forwarded, and the
+/// branch produces the successor arguments.
+SuccessorOperands MonadEitherBranchOp::getSuccessorOperands(unsigned index) {
+  assert(index < 2 && "invalid successor index");
+  unsigned produced =
+      index == 0 ? 1 : getInput().getType().getValueTypes().size();
+  return SuccessorOperands(produced, MutableOperandRange(getOperation(), 0, 0));
 }

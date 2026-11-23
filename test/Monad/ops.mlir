@@ -80,3 +80,50 @@ func.func @do_single_block(%input: !monad.maybe<i32>) -> !monad.maybe<i32> {
   }
   return %result : !monad.maybe<i32>
 }
+
+// The right side is a list of types, or none for a right without value.
+// CHECK-LABEL: func.func private @either_types
+// CHECK-SAME: !monad.either<i32, f32>
+// CHECK-SAME: !monad.either<i32, none>
+func.func private @either_types(!monad.either<i32, f32>, !monad.either<i32, none>)
+
+// Build a left and a right, and branch on the side.
+// CHECK-LABEL: func.func @either_branch
+// CHECK: monad.either.left %{{.*}} : !monad.either<i32, f32>
+// CHECK: monad.return %{{.*}} : !monad.either<i32, f32>
+// CHECK: monad.either.branch %{{.*}}, left ^[[LEFT:.*]], right ^[[RIGHT:.*]] : !monad.either<i32, f32>
+// CHECK: ^[[LEFT]](%{{.*}}: i32):
+// CHECK: ^[[RIGHT]](%{{.*}}: f32):
+func.func @either_branch(%code: i32, %value: f32, %flag: i1) -> f32 {
+  %left = monad.either.left %code : !monad.either<i32, f32>
+  %right = monad.return %value : !monad.either<i32, f32>
+  %either = arith.select %flag, %left, %right : !monad.either<i32, f32>
+  monad.either.branch %either, left ^left, right ^right : !monad.either<i32, f32>
+^left(%error: i32):
+  %converted = arith.sitofp %error : i32 to f32
+  return %converted : f32
+^right(%result: f32):
+  return %result : f32
+}
+
+// Bind a right with no value and a right with a value, inside a do of the
+// same left type and other right types; a left ends the do.
+// CHECK-LABEL: func.func @either_bind
+// CHECK: monad.do : !monad.either<i32, f32> {
+// CHECK: monad.bind %{{.*}}, ^[[CHECKED:.*]] : !monad.either<i32, none>
+// CHECK: ^[[CHECKED]]:
+// CHECK: monad.bind %{{.*}}, ^[[NEXT:.*]] : !monad.either<i32, i64>
+// CHECK: ^[[NEXT]](%{{.*}}: i64):
+func.func @either_bind(%check: !monad.either<i32, none>,
+                       %input: !monad.either<i32, i64>) -> !monad.either<i32, f32> {
+  %result = monad.do : !monad.either<i32, f32> {
+    monad.bind %check, ^checked : !monad.either<i32, none>
+  ^checked:
+    monad.bind %input, ^next : !monad.either<i32, i64>
+  ^next(%value: i64):
+    %converted = arith.sitofp %value : i64 to f32
+    %success = monad.return %converted : !monad.either<i32, f32>
+    monad.yield %success : !monad.either<i32, f32>
+  }
+  return %result : !monad.either<i32, f32>
+}
