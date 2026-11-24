@@ -42,15 +42,22 @@ static void printValueTypes(AsmPrinter &printer, ArrayRef<Type> valueTypes) {
 #define GET_TYPEDEF_CLASSES
 #include "fum/Dialect/Monad/IR/MonadOpsTypes.cpp.inc"
 
-/// Returns this type with the given value types.
-MonadTypeInterface MaybeType::cloneWithValueTypes(TypeRange valueTypes) const {
-  return MaybeType::get(getContext(), llvm::to_vector(valueTypes));
+/// Returns true if the enclosing type is a maybe type, and the arguments are
+/// the value types of this type.
+bool MaybeType::areBindTypesCompatible(Type enclosingType,
+                                       TypeRange argumentTypes) const {
+  return isa<MaybeType>(enclosingType) &&
+         argumentTypes == TypeRange(getValueTypes());
 }
 
-/// Returns this type with the given value types.
-MonadTypeInterface EitherType::cloneWithValueTypes(TypeRange valueTypes) const {
-  return EitherType::get(getContext(), getLeftType(),
-                         llvm::to_vector(valueTypes));
+/// Returns true if the enclosing type is an either type with the same left
+/// type, and the arguments are the right types of this type.
+bool EitherType::areBindTypesCompatible(Type enclosingType,
+                                        TypeRange argumentTypes) const {
+  auto enclosingEitherType = dyn_cast<EitherType>(enclosingType);
+  return enclosingEitherType &&
+         enclosingEitherType.getLeftType() == getLeftType() &&
+         argumentTypes == TypeRange(getValueTypes());
 }
 
 /// Verifies that there is at least one right type.

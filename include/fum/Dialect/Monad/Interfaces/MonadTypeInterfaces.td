@@ -31,12 +31,14 @@ def MonadTypeInterface : TypeInterface<"MonadTypeInterface"> {
     >,
     InterfaceMethod<
       /*desc=*/[{
-        Returns this monadic type with its value types replaced by
-        `valueTypes`, keeping every other parameter of the type.
+        Returns true if a value of this type can be bound in a `monad.do`
+        producing `enclosingType`, continuing to a block whose arguments are
+        of types `argumentTypes`.
       }],
-      /*returnType=*/"::mlir::monad::MonadTypeInterface",
-      /*name=*/"cloneWithValueTypes",
-      /*arguments=*/(ins "::mlir::TypeRange":$valueTypes)
+      /*returnType=*/"bool",
+      /*name=*/"areBindTypesCompatible",
+      /*arguments=*/(ins "::mlir::Type":$enclosingType,
+                         "::mlir::TypeRange":$argumentTypes)
     >
   ];
 }
