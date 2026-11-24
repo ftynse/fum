@@ -81,12 +81,6 @@ func.func @do_single_block(%input: !monad.maybe<i32>) -> !monad.maybe<i32> {
   return %result : !monad.maybe<i32>
 }
 
-// A right carrying nothing is written none.
-// CHECK-LABEL: func.func private @either_types
-// CHECK-SAME: !monad.either<i32, f32>
-// CHECK-SAME: !monad.either<i32, none>
-func.func private @either_types(!monad.either<i32, f32>, !monad.either<i32, none>)
-
 // Build a left and a right, and branch on the side.
 // CHECK-LABEL: func.func @either_branch
 // CHECK: monad.either.left %{{.*}} : !monad.either<i32, f32>
@@ -106,18 +100,13 @@ func.func @either_branch(%x: i32, %y: f32, %flag: i1) -> f32 {
   return %r : f32
 }
 
-// Bind rights of other value types, with the left type of the do.
+// Bind a right of another value type, with the left type of the do.
 // CHECK-LABEL: func.func @either_bind
 // CHECK: monad.do : !monad.either<i32, f32> {
-// CHECK: monad.bind %{{.*}}, ^[[CHECKED:.*]] : !monad.either<i32, none>
-// CHECK: ^[[CHECKED]]:
 // CHECK: monad.bind %{{.*}}, ^[[NEXT:.*]] : !monad.either<i32, i64>
 // CHECK: ^[[NEXT]](%{{.*}}: i64):
-func.func @either_bind(%check: !monad.either<i32, none>,
-                       %input: !monad.either<i32, i64>) -> !monad.either<i32, f32> {
+func.func @either_bind(%input: !monad.either<i32, i64>) -> !monad.either<i32, f32> {
   %result = monad.do : !monad.either<i32, f32> {
-    monad.bind %check, ^checked : !monad.either<i32, none>
-  ^checked:
     monad.bind %input, ^next : !monad.either<i32, i64>
   ^next(%value: i64):
     %converted = arith.sitofp %value : i64 to f32

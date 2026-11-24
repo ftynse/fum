@@ -39,27 +39,6 @@ static void printValueTypes(AsmPrinter &printer, ArrayRef<Type> valueTypes) {
   llvm::interleaveComma(valueTypes, printer);
 }
 
-/// Parses the right types of an either type, where `none` alone stands for
-/// no types.
-static ParseResult parseRightTypes(AsmParser &parser,
-                                   SmallVector<Type> &valueTypes) {
-  if (parser.parseCommaSeparatedList(
-          [&]() { return parser.parseType(valueTypes.emplace_back()); }))
-    return failure();
-  if (valueTypes.size() == 1 && isa<NoneType>(valueTypes.front()))
-    valueTypes.clear();
-  return success();
-}
-
-/// Prints the right types of an either type, or `none` if there are none.
-static void printRightTypes(AsmPrinter &printer, ArrayRef<Type> valueTypes) {
-  if (valueTypes.empty()) {
-    printer << "none";
-    return;
-  }
-  llvm::interleaveComma(valueTypes, printer);
-}
-
 #define GET_TYPEDEF_CLASSES
 #include "fum/Dialect/Monad/IR/MonadOpsTypes.cpp.inc"
 
@@ -74,12 +53,11 @@ MonadTypeInterface EitherType::cloneWithValueTypes(TypeRange valueTypes) const {
                          llvm::to_vector(valueTypes));
 }
 
-/// Verifies that no value type is `none`.
+/// Verifies that there is at least one right type.
 LogicalResult EitherType::verify(function_ref<InFlightDiagnostic()> emitError,
                                  Type leftType, ArrayRef<Type> valueTypes) {
-  if (llvm::any_of(valueTypes, llvm::IsaPred<NoneType>))
-    return emitError()
-           << "expects 'none' to be the only right type of an either type";
+  if (valueTypes.empty())
+    return emitError() << "expects at least one right type";
   return success();
 }
 

@@ -221,14 +221,9 @@ func.func private @either_without_right(!monad.either<i32>)
 
 // -----
 
-// expected-error @below {{expects 'none' to be the only right type of an either type}}
-func.func private @either_none_among_right_types(!monad.either<i32, f32, none>)
-
-// -----
-
 func.func @either_left_wrong_type(%value: i64) {
   // expected-error @below {{failed to verify that value type matches the left type of the result}}
-  %left = "monad.either.left"(%value) : (i64) -> !monad.either<i32, none>
+  %left = "monad.either.left"(%value) : (i64) -> !monad.either<i32, f32>
   return
 }
 

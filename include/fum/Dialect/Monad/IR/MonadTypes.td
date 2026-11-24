@@ -41,18 +41,18 @@ def MonadEitherType : Monad_Type<"Either", "either", [
   let description = [{
     A value of type `!monad.either<L, R1, ..., Rn>` is either a left carrying
     one value of type `L`, or a right carrying one value of each type `R1`,
-    ..., `Rn`, the value types of the monad. A right carrying nothing is
-    written `none`.
+    ..., `Rn`, the value types of the monad. There is at least one right
+    type.
 
     ```mlir
     !monad.either<i32, f32>
-    !monad.either<i32, none>
+    !monad.either<i32, f32, i64>
     ```
   }];
   let parameters = (ins
       "::mlir::Type":$leftType,
-      OptionalArrayRefParameter<"::mlir::Type", "value types">:$valueTypes);
-  let assemblyFormat = "`<` $leftType `,` custom<RightTypes>($valueTypes) `>`";
+      ArrayRefParameter<"::mlir::Type", "value types">:$valueTypes);
+  let assemblyFormat = "`<` $leftType `,` $valueTypes `>`";
   let genVerifyDecl = 1;
 }
 
