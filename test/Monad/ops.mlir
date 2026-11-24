@@ -90,13 +90,13 @@ func.func private @either_types(!monad.either<i32, f32>, !monad.either<i32, none
 // Build a left and a right, and branch on the side.
 // CHECK-LABEL: func.func @either_branch
 // CHECK: monad.either.left %{{.*}} : !monad.either<i32, f32>
-// CHECK: monad.return %{{.*}} : !monad.either<i32, f32>
+// CHECK: monad.either.right %{{.*}} : !monad.either<i32, f32>
 // CHECK: monad.either.branch %{{.*}}, left ^[[LEFT:.*]], right ^[[RIGHT:.*]] : !monad.either<i32, f32>
 // CHECK: ^[[LEFT]](%{{.*}}: i32):
 // CHECK: ^[[RIGHT]](%{{.*}}: f32):
 func.func @either_branch(%x: i32, %y: f32, %flag: i1) -> f32 {
   %left = monad.either.left %x : !monad.either<i32, f32>
-  %right = monad.return %y : !monad.either<i32, f32>
+  %right = monad.either.right %y : !monad.either<i32, f32>
   %either = arith.select %flag, %left, %right : !monad.either<i32, f32>
   monad.either.branch %either, left ^left, right ^right : !monad.either<i32, f32>
 ^left(%l: i32):
@@ -125,4 +125,20 @@ func.func @either_bind(%check: !monad.either<i32, none>,
     monad.yield %success : !monad.either<i32, f32>
   }
   return %result : !monad.either<i32, f32>
+}
+
+// Bind a right carrying several values, and build one.
+// CHECK-LABEL: func.func @either_multiple_right_types
+// CHECK: monad.bind %{{.*}}, ^[[NEXT:.*]] : !monad.either<i32, i64, f32>
+// CHECK: ^[[NEXT]](%[[A:.*]]: i64, %[[B:.*]]: f32):
+// CHECK: monad.either.right %[[B]], %[[A]] : !monad.either<i32, f32, i64>
+func.func @either_multiple_right_types(%input: !monad.either<i32, i64, f32>)
+    -> !monad.either<i32, f32, i64> {
+  %result = monad.do : !monad.either<i32, f32, i64> {
+    monad.bind %input, ^next : !monad.either<i32, i64, f32>
+  ^next(%a: i64, %b: f32):
+    %swapped = monad.either.right %b, %a : !monad.either<i32, f32, i64>
+    monad.yield %swapped : !monad.either<i32, f32, i64>
+  }
+  return %result : !monad.either<i32, f32, i64>
 }

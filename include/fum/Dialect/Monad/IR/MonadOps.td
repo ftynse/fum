@@ -156,6 +156,25 @@ def MonadEitherLeftOp : Monad_Op<"either.left", [
   let assemblyFormat = "$value attr-dict `:` qualified(type($result))";
 }
 
+def MonadEitherRightOp : Monad_Op<"either.right", [
+    Pure,
+    RangedTypesMatchWith<"value types match the right types of the result",
+                         "result", "values",
+                         "::llvm::cast<::mlir::monad::EitherType>($_self).getValueTypes()">]> {
+  let summary = "Creates a right either value";
+  let description = [{
+    Creates the right either value carrying the given values, as
+    `monad.return` does.
+
+    ```mlir
+    %m = monad.either.right %x, %y : !monad.either<i32, f32, i64>
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$values);
+  let results = (outs MonadEitherType:$result);
+  let assemblyFormat = "$values attr-dict `:` qualified(type($result))";
+}
+
 def MonadEitherBranchOp : Monad_Op<"either.branch", [
     Terminator,
     DeclareOpInterfaceMethods<BranchOpInterface>]> {

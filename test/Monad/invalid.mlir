@@ -256,3 +256,25 @@ func.func @either_bind_other_left(%input: !monad.either<i64, f32>) -> !monad.eit
   }
   return %result : !monad.either<i32, f32>
 }
+
+// -----
+
+func.func @either_bind_multiple_right_types(%input: !monad.either<i32, i64, f32>) -> !monad.either<i32, f32> {
+  %result = monad.do : !monad.either<i32, f32> {
+    // expected-error @below {{expects the successor to take arguments of types ('i64', 'f32')}}
+    monad.bind %input, ^next : !monad.either<i32, i64, f32>
+  ^next(%a: i64, %b: i64):
+    %zero = arith.constant 0.0 : f32
+    %success = monad.return %zero : !monad.either<i32, f32>
+    monad.yield %success : !monad.either<i32, f32>
+  }
+  return %result : !monad.either<i32, f32>
+}
+
+// -----
+
+func.func @either_right_wrong_types(%value: i64) {
+  // expected-error @below {{failed to verify that value types match the right types of the result}}
+  %right = "monad.either.right"(%value) : (i64) -> !monad.either<i32, f32>
+  return
+}

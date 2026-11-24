@@ -43,17 +43,11 @@ static void printValueTypes(AsmPrinter &printer, ArrayRef<Type> valueTypes) {
 /// no types.
 static ParseResult parseRightTypes(AsmParser &parser,
                                    SmallVector<Type> &valueTypes) {
-  SMLoc loc = parser.getCurrentLocation();
   if (parser.parseCommaSeparatedList(
           [&]() { return parser.parseType(valueTypes.emplace_back()); }))
     return failure();
-  if (valueTypes.size() == 1 && isa<NoneType>(valueTypes.front())) {
+  if (valueTypes.size() == 1 && isa<NoneType>(valueTypes.front()))
     valueTypes.clear();
-    return success();
-  }
-  if (llvm::any_of(valueTypes, llvm::IsaPred<NoneType>))
-    return parser.emitError(loc)
-           << "expects 'none' to be the only right type of an either type";
   return success();
 }
 
@@ -84,8 +78,8 @@ MonadTypeInterface EitherType::cloneWithValueTypes(TypeRange valueTypes) const {
 LogicalResult EitherType::verify(function_ref<InFlightDiagnostic()> emitError,
                                  Type leftType, ArrayRef<Type> valueTypes) {
   if (llvm::any_of(valueTypes, llvm::IsaPred<NoneType>))
-    return emitError() << "expects no 'none' value type; an either type "
-                          "without value types is written with 'none'";
+    return emitError()
+           << "expects 'none' to be the only right type of an either type";
   return success();
 }
 

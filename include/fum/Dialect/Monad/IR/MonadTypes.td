@@ -22,7 +22,8 @@ class Monad_Type<string name, string typeMnemonic, list<Trait> traits = []>
   let mnemonic = typeMnemonic;
 }
 
-def MonadMaybeType : Monad_Type<"Maybe", "maybe", [MonadTypeInterface]> {
+def MonadMaybeType : Monad_Type<"Maybe", "maybe", [
+    DeclareTypeInterfaceMethods<MonadTypeInterface>]> {
   let summary = "Maybe monad type";
   let description = [{
     A value of type `!monad.maybe<T1, ..., Tn>` is either `some` value
@@ -32,13 +33,10 @@ def MonadMaybeType : Monad_Type<"Maybe", "maybe", [MonadTypeInterface]> {
   let parameters = (ins
       OptionalArrayRefParameter<"::mlir::Type", "value types">:$valueTypes);
   let assemblyFormat = "`<` custom<ValueTypes>($valueTypes) `>`";
-  let extraClassDeclaration = [{
-    /// Returns this type with the given value types.
-    MonadTypeInterface cloneWithValueTypes(::mlir::TypeRange valueTypes) const;
-  }];
 }
 
-def MonadEitherType : Monad_Type<"Either", "either", [MonadTypeInterface]> {
+def MonadEitherType : Monad_Type<"Either", "either", [
+    DeclareTypeInterfaceMethods<MonadTypeInterface>]> {
   let summary = "Either monad type";
   let description = [{
     A value of type `!monad.either<L, R1, ..., Rn>` is either a left carrying
@@ -56,10 +54,6 @@ def MonadEitherType : Monad_Type<"Either", "either", [MonadTypeInterface]> {
       OptionalArrayRefParameter<"::mlir::Type", "value types">:$valueTypes);
   let assemblyFormat = "`<` $leftType `,` custom<RightTypes>($valueTypes) `>`";
   let genVerifyDecl = 1;
-  let extraClassDeclaration = [{
-    /// Returns this type with the given value types.
-    MonadTypeInterface cloneWithValueTypes(::mlir::TypeRange valueTypes) const;
-  }];
 }
 
 #endif // MONAD_TYPES
