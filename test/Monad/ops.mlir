@@ -131,3 +131,30 @@ func.func @either_multiple_right_types(%input: !monad.either<i32, i64, f32>)
   }
   return %result : !monad.either<i32, f32, i64>
 }
+
+// A block of a do may branch on the case of a sum with adt.switch.
+// CHECK-LABEL: func.func @switch_in_do
+// CHECK: adt.switch %{{.*}} : !adt.sum<a, b>, [
+func.func @switch_in_do(%input: !monad.either<!adt.sum<a, b>, i32>)
+    -> !monad.either<!adt.sum<b>, i32> {
+  %result = monad.do : !monad.either<!adt.sum<b>, i32> {
+    monad.either.branch %input, left ^left, right ^right : !monad.either<!adt.sum<a, b>, i32>
+  ^left(%l: !adt.sum<a, b>):
+    adt.switch %l : !adt.sum<a, b>, [
+      a: ^a,
+      b: ^b
+    ]
+  ^a:
+    %zero = arith.constant 0 : i32
+    %recovered = monad.return %zero : !monad.either<!adt.sum<b>, i32>
+    monad.yield %recovered : !monad.either<!adt.sum<b>, i32>
+  ^b:
+    %b = adt.make b : !adt.sum<b>
+    %rethrown = monad.either.left %b : !monad.either<!adt.sum<b>, i32>
+    monad.yield %rethrown : !monad.either<!adt.sum<b>, i32>
+  ^right(%r: i32):
+    %success = monad.return %r : !monad.either<!adt.sum<b>, i32>
+    monad.yield %success : !monad.either<!adt.sum<b>, i32>
+  }
+  return %result : !monad.either<!adt.sum<b>, i32>
+}

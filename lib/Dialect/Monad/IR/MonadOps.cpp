@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "fum/Dialect/Monad/IR/MonadOps.h"
+#include "fum/Dialect/ADT/IR/ADTOps.h"
 #include "fum/Dialect/Monad/IR/MonadDialect.h"
 
 #include "mlir/IR/Builders.h"
@@ -32,9 +33,11 @@ LogicalResult MonadDoOp::verifyRegions() {
                 "predecessor";
   }
   for (Block &block : getBody()) {
-    if (!isa_and_nonnull<MonadDialect>(block.getTerminator()->getDialect()))
-      return emitOpError()
-             << "expects every block terminator to belong to the monad dialect";
+    Operation *terminator = block.getTerminator();
+    if (!isa_and_nonnull<MonadDialect>(terminator->getDialect()) &&
+        !isa<adt::SwitchOp>(terminator))
+      return emitOpError() << "expects every block terminator to belong to "
+                              "the monad dialect, or to be adt.switch";
   }
   return success();
 }
