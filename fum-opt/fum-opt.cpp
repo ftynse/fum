@@ -17,6 +17,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
+#include "fum/Dialect/ADT/IR/ADTDialect.h"
 #include "fum/Dialect/Dep/IR/DepDialect.h"
 #include "fum/Dialect/Dep/Transforms/Passes.h"
 #include "fum/Dialect/Monad/IR/MonadDialect.h"
@@ -35,9 +36,9 @@ int main(int argc, char **argv) {
   mlir::dep::registerPasses();
 
   mlir::DialectRegistry registry;
-  registry.insert<mlir::dep::DepDialect, mlir::monad::MonadDialect,
-                  mlir::arith::ArithDialect, mlir::func::FuncDialect,
-                  mlir::transform::TransformDialect>();
+  registry.insert<mlir::adt::ADTDialect, mlir::dep::DepDialect,
+                  mlir::monad::MonadDialect, mlir::arith::ArithDialect,
+                  mlir::func::FuncDialect, mlir::transform::TransformDialect>();
   registerExternalInterfaces(registry);
 
   // Add the following to include *all* MLIR Core dialects, or selectively

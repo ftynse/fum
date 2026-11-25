@@ -11,6 +11,7 @@ add_mlir_dialect_library(MLIRMonadDialect
   MLIRMonadTypeInterfacesIncGen
 
   LINK_LIBS PUBLIC
+  MLIRADTDialect
   MLIRControlFlowInterfaces
   MLIRIR
   MLIRMonadInterfaces

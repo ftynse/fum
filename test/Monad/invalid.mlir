@@ -194,7 +194,7 @@ func.func @do_block_with_multiple_predecessors(%input: !monad.maybe<>) {
 
 // Reject a foreign terminator in the entry block.
 func.func @do_entry_block_with_foreign_terminator() {
-  // expected-error @below {{expects every block terminator to belong to the monad dialect}}
+  // expected-error @below {{expects every block terminator to belong to the monad dialect, or to be adt.switch}}
   %result = monad.do : !monad.maybe<> {
     dep.yield
   }
@@ -205,7 +205,7 @@ func.func @do_entry_block_with_foreign_terminator() {
 
 // Reject a foreign terminator in a continuation block.
 func.func @do_continuation_with_foreign_terminator(%input: !monad.maybe<>) {
-  // expected-error @below {{expects every block terminator to belong to the monad dialect}}
+  // expected-error @below {{expects every block terminator to belong to the monad dialect, or to be adt.switch}}
   %result = monad.do : !monad.maybe<> {
     monad.bind %input, ^next : !monad.maybe<>
   ^next:
