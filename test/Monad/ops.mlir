@@ -80,3 +80,54 @@ func.func @do_single_block(%input: !monad.maybe<i32>) -> !monad.maybe<i32> {
   }
   return %result : !monad.maybe<i32>
 }
+
+// Build a left and a right, and branch on the side.
+// CHECK-LABEL: func.func @either_branch
+// CHECK: monad.either.left %{{.*}} : !monad.either<i32, f32>
+// CHECK: monad.either.right %{{.*}} : !monad.either<i32, f32>
+// CHECK: monad.either.branch %{{.*}}, left ^[[LEFT:.*]], right ^[[RIGHT:.*]] : !monad.either<i32, f32>
+// CHECK: ^[[LEFT]](%{{.*}}: i32):
+// CHECK: ^[[RIGHT]](%{{.*}}: f32):
+func.func @either_branch(%x: i32, %y: f32, %flag: i1) -> f32 {
+  %left = monad.either.left %x : !monad.either<i32, f32>
+  %right = monad.either.right %y : !monad.either<i32, f32>
+  %either = arith.select %flag, %left, %right : !monad.either<i32, f32>
+  monad.either.branch %either, left ^left, right ^right : !monad.either<i32, f32>
+^left(%l: i32):
+  %converted = arith.sitofp %l : i32 to f32
+  return %converted : f32
+^right(%r: f32):
+  return %r : f32
+}
+
+// Bind a right of another value type, with the left type of the do.
+// CHECK-LABEL: func.func @either_bind
+// CHECK: monad.do : !monad.either<i32, f32> {
+// CHECK: monad.bind %{{.*}}, ^[[NEXT:.*]] : !monad.either<i32, i64>
+// CHECK: ^[[NEXT]](%{{.*}}: i64):
+func.func @either_bind(%input: !monad.either<i32, i64>) -> !monad.either<i32, f32> {
+  %result = monad.do : !monad.either<i32, f32> {
+    monad.bind %input, ^next : !monad.either<i32, i64>
+  ^next(%value: i64):
+    %converted = arith.sitofp %value : i64 to f32
+    %success = monad.return %converted : !monad.either<i32, f32>
+    monad.yield %success : !monad.either<i32, f32>
+  }
+  return %result : !monad.either<i32, f32>
+}
+
+// Bind a right carrying several values, and build one.
+// CHECK-LABEL: func.func @either_multiple_right_types
+// CHECK: monad.bind %{{.*}}, ^[[NEXT:.*]] : !monad.either<i32, i64, f32>
+// CHECK: ^[[NEXT]](%[[A:.*]]: i64, %[[B:.*]]: f32):
+// CHECK: monad.either.right %[[B]], %[[A]] : !monad.either<i32, f32, i64>
+func.func @either_multiple_right_types(%input: !monad.either<i32, i64, f32>)
+    -> !monad.either<i32, f32, i64> {
+  %result = monad.do : !monad.either<i32, f32, i64> {
+    monad.bind %input, ^next : !monad.either<i32, i64, f32>
+  ^next(%a: i64, %b: f32):
+    %swapped = monad.either.right %b, %a : !monad.either<i32, f32, i64>
+    monad.yield %swapped : !monad.either<i32, f32, i64>
+  }
+  return %result : !monad.either<i32, f32, i64>
+}

@@ -45,13 +45,15 @@ def MonadDoOp : Monad_Op<"do", [RecursiveMemoryEffects]> {
     are continuations: `monad.bind` ends a block by binding the values of a
     monadic value to the arguments of the next block, and `monad.yield` ends
     the computation with its result. Every value bound in the region is of the
-    same monad as the result. Every block except the first must have exactly
-    one predecessor. Every block must end with a terminator from the monad
-    dialect.
+    same monad as the result: its type is the result type up to the value
+    types. Every block except the first must have exactly one predecessor.
+    Every block must end with a terminator from the monad dialect.
 
     How a bind continues depends on the monad. For the maybe monad, binding
     `some` value branches to the next block with the values it carries, and
-    binding `none` ends the computation with `none`.
+    binding `none` ends the computation with `none`. For the either monad,
+    binding a right continues with its values, and binding a left ends the
+    computation with it.
 
     Because a bind may leave the region, this operation does not implement
     `RegionBranchOpInterface`, and data-flow analyses treat its result
@@ -130,6 +132,70 @@ def MonadMaybeNoneOp : Monad_Op<"maybe.none", [Pure]> {
   }];
   let results = (outs MonadMaybeType:$result);
   let assemblyFormat = "attr-dict `:` qualified(type($result))";
+}
+
+//===----------------------------------------------------------------------===//
+// Either operations
+//===----------------------------------------------------------------------===//
+
+def MonadEitherLeftOp : Monad_Op<"either.left", [
+    Pure,
+    TypesMatchWith<"value type matches the left type of the result",
+                   "result", "value",
+                   "::llvm::cast<::mlir::monad::EitherType>($_self).getLeftType()">]> {
+  let summary = "Creates a left either value";
+  let description = [{
+    Creates the left either value carrying the given value.
+
+    ```mlir
+    %m = monad.either.left %x : !monad.either<i32, f32>
+    ```
+  }];
+  let arguments = (ins AnyType:$value);
+  let results = (outs MonadEitherType:$result);
+  let assemblyFormat = "$value attr-dict `:` qualified(type($result))";
+}
+
+def MonadEitherRightOp : Monad_Op<"either.right", [
+    Pure,
+    RangedTypesMatchWith<"value types match the right types of the result",
+                         "result", "values",
+                         "::llvm::cast<::mlir::monad::EitherType>($_self).getValueTypes()">]> {
+  let summary = "Creates a right either value";
+  let description = [{
+    Creates the right either value carrying the given values, as
+    `monad.return` does.
+
+    ```mlir
+    %m = monad.either.right %x, %y : !monad.either<i32, f32, i64>
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$values);
+  let results = (outs MonadEitherType:$result);
+  let assemblyFormat = "$values attr-dict `:` qualified(type($result))";
+}
+
+def MonadEitherBranchOp : Monad_Op<"either.branch", [
+    Terminator,
+    DeclareOpInterfaceMethods<BranchOpInterface>]> {
+  let summary = "Branches on the side of an either value";
+  let description = [{
+    Branches to `left` with the value of a left, and to `right` with the
+    values of a right.
+
+    ```mlir
+    monad.either.branch %m, left ^l, right ^r : !monad.either<i32, f32>
+    ^l(%x: i32):
+    ^r(%y: f32):
+    ```
+  }];
+  let arguments = (ins MonadEitherType:$input);
+  let successors = (successor AnySuccessor:$left, AnySuccessor:$right);
+  let assemblyFormat = [{
+    $input `,` `left` $left `,` `right` $right attr-dict `:`
+    qualified(type($input))
+  }];
+  let hasVerifier = 1;
 }
 
 #endif // MONAD_OPS

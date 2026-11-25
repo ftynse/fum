@@ -105,7 +105,7 @@ func.func @bind_input_not_monadic(%input: i32) {
 
 func.func @bind_successor_type_mismatch(%input: !monad.maybe<i32>) {
   %result = monad.do : !monad.maybe<i32> {
-    // expected-error @below {{expects the successor to take arguments of types ('i32')}}
+    // expected-error @below {{expects the input and the successor arguments to be compatible with the enclosing monad.do}}
     monad.bind %input, ^next : !monad.maybe<i32>
   ^next(%value: f32):
     %none = monad.maybe.none : !monad.maybe<i32>
@@ -118,7 +118,7 @@ func.func @bind_successor_type_mismatch(%input: !monad.maybe<i32>) {
 
 func.func @bind_successor_count_mismatch(%input: !monad.maybe<i32, i32>) {
   %result = monad.do : !monad.maybe<i32> {
-    // expected-error @below {{branch has 2 operands for successor #0, but target block has 1}}
+    // expected-error @below {{expects the input and the successor arguments to be compatible with the enclosing monad.do}}
     monad.bind %input, ^next : !monad.maybe<i32, i32>
   ^next(%value: i32):
     %none = monad.maybe.none : !monad.maybe<i32>
@@ -211,5 +211,65 @@ func.func @do_continuation_with_foreign_terminator(%input: !monad.maybe<>) {
   ^next:
     dep.yield
   }
+  return
+}
+
+// -----
+
+// expected-error @below {{expected ','}}
+func.func private @either_without_right(!monad.either<i32>)
+
+// -----
+
+func.func @either_left_wrong_type(%value: i64) {
+  // expected-error @below {{failed to verify that value type matches the left type of the result}}
+  %left = "monad.either.left"(%value) : (i64) -> !monad.either<i32, f32>
+  return
+}
+
+// -----
+
+func.func @either_branch_wrong_left(%input: !monad.either<i32, f32>) {
+  // expected-error @below {{expects the left successor to take one argument of type 'i32'}}
+  monad.either.branch %input, left ^left, right ^right : !monad.either<i32, f32>
+^left(%error: i64):
+  return
+^right(%value: f32):
+  return
+}
+
+// -----
+
+// A bound either must have the left type of the do.
+func.func @either_bind_other_left(%input: !monad.either<i64, f32>) -> !monad.either<i32, f32> {
+  %result = monad.do : !monad.either<i32, f32> {
+    // expected-error @below {{expects the input and the successor arguments to be compatible with the enclosing monad.do}}
+    monad.bind %input, ^next : !monad.either<i64, f32>
+  ^next(%value: f32):
+    %success = monad.return %value : !monad.either<i32, f32>
+    monad.yield %success : !monad.either<i32, f32>
+  }
+  return %result : !monad.either<i32, f32>
+}
+
+// -----
+
+func.func @either_bind_multiple_right_types(%input: !monad.either<i32, i64, f32>) -> !monad.either<i32, f32> {
+  %result = monad.do : !monad.either<i32, f32> {
+    // expected-error @below {{expects the input and the successor arguments to be compatible with the enclosing monad.do}}
+    monad.bind %input, ^next : !monad.either<i32, i64, f32>
+  ^next(%a: i64, %b: i64):
+    %zero = arith.constant 0.0 : f32
+    %success = monad.return %zero : !monad.either<i32, f32>
+    monad.yield %success : !monad.either<i32, f32>
+  }
+  return %result : !monad.either<i32, f32>
+}
+
+// -----
+
+func.func @either_right_wrong_types(%value: i64) {
+  // expected-error @below {{failed to verify that value types match the right types of the result}}
+  %right = "monad.either.right"(%value) : (i64) -> !monad.either<i32, f32>
   return
 }

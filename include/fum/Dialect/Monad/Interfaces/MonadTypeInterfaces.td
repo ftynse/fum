@@ -28,6 +28,17 @@ def MonadTypeInterface : TypeInterface<"MonadTypeInterface"> {
       /*returnType=*/"::mlir::TypeRange",
       /*name=*/"getValueTypes",
       /*arguments=*/(ins)
+    >,
+    InterfaceMethod<
+      /*desc=*/[{
+        Returns true if a value of this type can be bound in a `monad.do`
+        producing `enclosingType`, continuing to a block whose arguments are
+        of types `argumentTypes`.
+      }],
+      /*returnType=*/"bool",
+      /*name=*/"areBindTypesCompatible",
+      /*arguments=*/(ins "::mlir::Type":$enclosingType,
+                         "::mlir::TypeRange":$argumentTypes)
     >
   ];
 }
