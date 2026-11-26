@@ -12,6 +12,7 @@
 include "fum/Dialect/Dep/IR/DepTypes.td"
 include "fum/Dialect/Dep/Interfaces/DepOpInterfaces.td"
 
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
@@ -193,15 +194,20 @@ def DepTypeSumOp : Dep_Op<"type.sum", [Pure]> {
     Type constructor creating a sum type, i.e., a type that can take any of the
     values of the types it is constructed from. In imperative languages, this
     can be understood as a tagged union.
+
+    The cases may optionally have distinct names, provided in an attribute
+    co-indexed with the list of subtypes. A case without a payload has the
+    type `none`.
   }];
   let arguments = (ins
-    Variadic<DepTypeType>:$subtypes
+    Variadic<DepTypeType>:$subtypes,
+    OptionalAttr<StrArrayAttr>:$names
   );
   let results = (outs
     DepTypeType:$result
   );
   let hasVerifier = 1;
-  let assemblyFormat = "$subtypes attr-dict";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def DepTypeProductOp : Dep_Op<"type.product", [Pure]> {
@@ -223,6 +229,51 @@ def DepTypeProductOp : Dep_Op<"type.product", [Pure]> {
   );
   let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
+}
+
+def DepSumMakeOp : Dep_Op<"sum.make", [Pure]> {
+  let summary = "Builds a value of one case of a sum";
+  let description = [{
+    Builds the case `case_name` of the result sum from one operand per field
+    of the case.
+
+    ```mlir
+    %shape = dep.sum.make rectangle(%width, %height)
+        : !dep.sum<circle(f32), rectangle(f32, f32)>
+    ```
+  }];
+  let arguments = (ins StrAttr:$case_name, Variadic<AnyType>:$fields);
+  let results = (outs DepSumType:$result);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def DepSumSwitchOp : Dep_Op<"sum.switch", [
+    Pure,
+    Terminator,
+    DeclareOpInterfaceMethods<BranchOpInterface>]> {
+  let summary = "Branches on the case of a sum";
+  let description = [{
+    Branches to the successor of the case that the input holds, with the
+    fields of the case as arguments. Without `default`, every case is listed.
+    With `default`, written first, at least one case is not listed, and the
+    `default` successor takes no arguments.
+
+    ```mlir
+    dep.sum.switch %shape : !dep.sum<circle(f32), point, rectangle(f32, f32)>, [
+      default: ^other,
+      circle: ^circle
+    ]
+    ```
+  }];
+  let arguments = (ins DepSumType:$input, StrArrayAttr:$case_names);
+  let successors = (successor VariadicSuccessor<AnySuccessor>:$destinations);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let extraClassDeclaration = [{
+    /// Returns the successor of the cases that are not listed, or null.
+    ::mlir::Block *getDefaultDestination();
+  }];
 }
 
 def DepYieldOp: Dep_Op<"yield", [Terminator, Pure]> {

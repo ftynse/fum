@@ -424,3 +424,95 @@ binds {
   %value = dep.type !dep.constructed<@Missing()>
   dep.yield %value : !dep.type
 }
+
+// -----
+
+dep.type.constructor @sum_duplicate_names()
+binds {
+}
+{
+  %none = dep.type none
+  // expected-error @below {{expects distinct case names, got 'a_err' twice}}
+  %sum = dep.type.sum {
+    "a_err": %none,
+    "a_err": %none
+  }
+  dep.yield %sum : !dep.type
+}
+
+// -----
+
+dep.type.constructor @sum_names_mismatch()
+binds {
+}
+{
+  %none = dep.type none
+  // expected-error @below {{expects 'names' to have 1 entries, but got 2}}
+  %sum = "dep.type.sum"(%none) {names = ["a_err", "b_err"]} : (!dep.type) -> !dep.type
+  dep.yield %sum : !dep.type
+}
+
+// -----
+
+// expected-error @below {{expects at least one case}}
+func.func private @sum_empty(!dep.sum<>)
+
+// -----
+
+// expected-error @below {{expected a case name}}
+func.func private @sum_unnamed(!dep.sum<(i32)>)
+
+// -----
+
+// expected-error @below {{expects distinct case names, got 'a' twice}}
+func.func private @sum_duplicate(!dep.sum<a, a(i32)>)
+
+// -----
+
+func.func @sum_make_unknown_case() {
+  // expected-error @below {{expects 'c' to be a case of '!dep.sum<a, b>'}}
+  %c = dep.sum.make c : !dep.sum<a, b>
+  return
+}
+
+// -----
+
+func.func @sum_make_wrong_fields(%x: i64) {
+  // expected-error @below {{expects the fields of case 'a' to have types ('i32')}}
+  %a = "dep.sum.make"(%x) {case_name = "a"} : (i64) -> !dep.sum<a(i32)>
+  return
+}
+
+// -----
+
+func.func @sum_switch_not_exhaustive(%s: !dep.sum<a, b>) {
+  // expected-error @below {{expects every case to be listed, or a default case}}
+  dep.sum.switch %s : !dep.sum<a, b>, [
+    a: ^a
+  ]
+^a:
+  return
+}
+
+// -----
+
+func.func @sum_switch_useless_default(%s: !dep.sum<a>) {
+  // expected-error @below {{expects the default case to handle at least one case}}
+  dep.sum.switch %s : !dep.sum<a>, [
+    default: ^a,
+    a: ^a
+  ]
+^a:
+  return
+}
+
+// -----
+
+func.func @sum_switch_wrong_fields(%s: !dep.sum<a(i32)>) {
+  // expected-error @below {{expects the successor of case 'a' to take arguments of types ('i32')}}
+  dep.sum.switch %s : !dep.sum<a(i32)>, [
+    a: ^a
+  ]
+^a(%x: i64):
+  return
+}

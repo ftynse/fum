@@ -207,6 +207,28 @@ binds {
   dep.yield %product : !dep.type
 }
 
+// Named sum cases use the field-name syntax; a case without a payload has the
+// type none.
+// CHECK-LABEL: dep.type.constructor @named_sum
+// CHECK: %[[NONE:.+]] = dep.type none
+// CHECK: %[[OPERAND:.+]] = dep.type i32
+// CHECK: %{{.*}} = dep.type.sum {
+// CHECK-NEXT: "div_by_zero_err": %[[NONE]],
+// CHECK-NEXT: "overflow_err": %[[OPERAND]]
+// CHECK-NEXT: }
+dep.type.constructor @named_sum()
+binds {
+}
+{
+  %none = dep.type none
+  %operand = dep.type i32
+  %sum = dep.type.sum {
+    "div_by_zero_err": %none,
+    "overflow_err": %operand
+  }
+  dep.yield %sum : !dep.type
+}
+
 // Unnamed products use a comma-separated operand list, and arbitrary operation
 // attributes remain outside the custom element list.
 // CHECK-LABEL: dep.type.constructor @unnamed_product
@@ -320,4 +342,37 @@ requires {
     dep.yield %type : !dep.type
   }
   dep.yield %t : !dep.type
+}
+
+// Cases may be written in any order; they are printed sorted by name.
+// CHECK-LABEL: func.func private @sum_types
+// CHECK-SAME: !dep.sum<a>, !dep.sum<a, b(i32, f32)>
+func.func private @sum_types(!dep.sum<a>, !dep.sum<b(i32, f32), a>)
+
+// CHECK-LABEL: func.func @sum_make
+// CHECK: dep.sum.make a : !dep.sum<a, b(i32)>
+// CHECK: dep.sum.make b(%{{.*}}) : !dep.sum<a, b(i32)>
+func.func @sum_make(%x: i32) -> (!dep.sum<a, b(i32)>, !dep.sum<a, b(i32)>) {
+  %a = dep.sum.make a : !dep.sum<a, b(i32)>
+  %b = dep.sum.make b(%x) : !dep.sum<a, b(i32)>
+  return %a, %b : !dep.sum<a, b(i32)>, !dep.sum<a, b(i32)>
+}
+
+// CHECK-LABEL: func.func @sum_switch
+// CHECK: dep.sum.switch %{{.*}} : !dep.sum<a, b(i32), c>, [
+// CHECK-NEXT: default: ^[[OTHER:.*]],
+// CHECK-NEXT: b: ^[[B:.*]]
+// CHECK-NEXT: ]
+// CHECK: ^[[B]](%{{.*}}: i32):
+// CHECK: ^[[OTHER]]:
+func.func @sum_switch(%s: !dep.sum<a, b(i32), c>) -> i32 {
+  dep.sum.switch %s : !dep.sum<a, b(i32), c>, [
+    default: ^other,
+    b: ^b
+  ]
+^b(%x: i32):
+  return %x : i32
+^other:
+  %zero = arith.constant 0 : i32
+  return %zero : i32
 }

@@ -11,6 +11,7 @@ add_mlir_dialect_library(MLIRDepDialect
   MLIRDepPassesIncGen
 
   LINK_LIBS PUBLIC
+  MLIRControlFlowInterfaces
   MLIRIR
   MLIRInferTypeOpInterface
   MLIRDepInterfaces

@@ -10,7 +10,10 @@
 #define DEP_DEPTYPES_H
 
 #include "fum/Dialect/Dep/Interfaces/DepTypeInteraces.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+
+#include <optional>
 
 #define GET_TYPEDEF_CLASSES
 #include "fum/Dialect/Dep/IR/DepTypes.h.inc"
