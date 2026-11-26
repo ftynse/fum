@@ -11,6 +11,7 @@
 #include "fum/Dialect/Dep/Interfaces/DepOpInterfaces.h"
 #include "fum/Dialect/Dep/Interfaces/DepTypeInteraces.h"
 #include "mlir/IR/Visitors.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/LogicalResult.h"
 
@@ -641,12 +642,9 @@ LogicalResult DepTypeOp::verify() {
   return verifyInsideTypeConstructor(getOperation());
 }
 
-LogicalResult DepTypeSumOp::verify() {
-  return verifyInsideTypeConstructor(getOperation());
-}
-
-ParseResult DepTypeProductOp::parse(OpAsmParser &parser,
-                                    OperationState &result) {
+/// Parses the subtypes of a type sum or product: either `{ "name": %type, ...
+/// }` or `%type, ...`, followed by an optional attribute dictionary.
+static ParseResult parseSubtypes(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::UnresolvedOperand> operands;
   SmallVector<StringRef> names;
 
@@ -686,14 +684,16 @@ ParseResult DepTypeProductOp::parse(OpAsmParser &parser,
   return parser.parseOptionalAttrDictWithKeyword(result.attributes);
 }
 
-void DepTypeProductOp::print(OpAsmPrinter &printer) {
-  ArrayAttr names = getNamesAttr();
+/// Prints the subtypes of a type sum or product in the form parsed by
+/// `parseSubtypes`.
+static void printSubtypes(OpAsmPrinter &printer, Operation *op) {
+  ArrayAttr names = op->getAttrOfType<ArrayAttr>("names");
   if (names) {
     printer << " {";
     printer.increaseIndent();
     printer.printNewline();
     llvm::interleave(
-        llvm::enumerate(getSubtypes()),
+        llvm::enumerate(op->getOperands()),
         [&](auto element) {
           printer << names[element.index()] << ": ";
           printer.printOperand(element.value());
@@ -708,19 +708,223 @@ void DepTypeProductOp::print(OpAsmPrinter &printer) {
   } else {
     printer << ' ';
     llvm::interleaveComma(
-        getSubtypes(), printer.getStream(),
+        op->getOperands(), printer.getStream(),
         [&](Value operand) { printer.printOperand(operand); });
   }
-  printer.printOptionalAttrDictWithKeyword(getOperation()->getAttrs(),
-                                           {getNamesAttrName().getValue()});
+  printer.printOptionalAttrDictWithKeyword(op->getAttrs(), {"names"});
+}
+
+/// Verifies that `names`, if present, has one entry per subtype.
+static LogicalResult verifySubtypeNames(Operation *op, ArrayAttr names,
+                                        size_t subtypeCount) {
+  if (names && names.size() != subtypeCount)
+    return op->emitOpError() << "expects 'names' to have " << subtypeCount
+                             << " entries, but got " << names.size();
+  return success();
+}
+
+ParseResult DepTypeSumOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseSubtypes(parser, result);
+}
+
+void DepTypeSumOp::print(OpAsmPrinter &printer) {
+  printSubtypes(printer, getOperation());
+}
+
+ParseResult DepTypeProductOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  return parseSubtypes(parser, result);
+}
+
+void DepTypeProductOp::print(OpAsmPrinter &printer) {
+  printSubtypes(printer, getOperation());
 }
 
 LogicalResult DepTypeProductOp::verify() {
   if (failed(verifyInsideTypeConstructor(getOperation())))
     return failure();
+  return verifySubtypeNames(getOperation(), getNamesAttr(),
+                            getSubtypes().size());
+}
+
+/// Verifies that the sum is in a type constructor and that its case names, if
+/// any, are distinct and one per subtype.
+LogicalResult DepTypeSumOp::verify() {
+  if (failed(verifyInsideTypeConstructor(getOperation())) ||
+      failed(verifySubtypeNames(getOperation(), getNamesAttr(),
+                                getSubtypes().size())))
+    return failure();
   ArrayAttr names = getNamesAttr();
-  if (names && names.size() != getSubtypes().size())
-    return emitOpError() << "expects 'names' to have " << getSubtypes().size()
-                         << " entries, but got " << names.size();
+  if (!names)
+    return success();
+  llvm::SmallDenseSet<StringRef> seen;
+  for (StringRef name : names.getAsValueRange<StringAttr>())
+    if (!seen.insert(name).second)
+      return emitOpError() << "expects distinct case names, got '" << name
+                           << "' twice";
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DepSumMakeOp
+//===----------------------------------------------------------------------===//
+
+/// Parses `case-name ( `(` fields `)` )? attr-dict `:` sum-type`; the operand
+/// types are the field types of the case.
+ParseResult DepSumMakeOp::parse(OpAsmParser &parser, OperationState &result) {
+  SMLoc loc = parser.getCurrentLocation();
+  StringRef caseName;
+  SmallVector<OpAsmParser::UnresolvedOperand> fields;
+  SumType type;
+  if (parser.parseKeyword(&caseName))
+    return failure();
+  if (succeeded(parser.parseOptionalLParen()) &&
+      (parser.parseOperandList(fields) || parser.parseRParen()))
+    return failure();
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type))
+    return failure();
+  std::optional<SmallVector<Type>> fieldTypes = type.getCaseFields(caseName);
+  if (!fieldTypes)
+    return parser.emitError(loc)
+           << "expects '" << caseName << "' to be a case of " << type;
+  if (parser.resolveOperands(fields, *fieldTypes, loc, result.operands))
+    return failure();
+  result.addAttribute(getCaseNameAttrName(result.name),
+                      parser.getBuilder().getStringAttr(caseName));
+  result.addTypes(type);
+  return success();
+}
+
+void DepSumMakeOp::print(OpAsmPrinter &printer) {
+  printer << ' ' << getCaseName();
+  if (!getFields().empty())
+    printer << '(' << getFields() << ')';
+  printer.printOptionalAttrDict((*this)->getAttrs(), {getCaseNameAttrName()});
+  printer << " : " << getType();
+}
+
+/// Verifies that the case exists and that the operands are its fields.
+LogicalResult DepSumMakeOp::verify() {
+  std::optional<SmallVector<Type>> fieldTypes =
+      getType().getCaseFields(getCaseName());
+  if (!fieldTypes)
+    return emitOpError() << "expects '" << getCaseName() << "' to be a case of "
+                         << getType();
+  if (TypeRange(getFields().getTypes()) != TypeRange(*fieldTypes))
+    return emitOpError() << "expects the fields of case '" << getCaseName()
+                         << "' to have types (" << *fieldTypes << ")";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DepSumSwitchOp
+//===----------------------------------------------------------------------===//
+
+/// Parses `%input : sum-type, [ (default: ^dest ,)? case: ^dest, ... ]`.
+ParseResult DepSumSwitchOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand input;
+  SumType inputType;
+  SmallVector<Attribute> names;
+  SmallVector<Block *> destinations;
+  Block *defaultDestination = nullptr;
+  auto parseCase = [&]() -> ParseResult {
+    SMLoc loc = parser.getCurrentLocation();
+    StringRef name;
+    Block *destination;
+    if (parser.parseKeyword(&name) || parser.parseColon() ||
+        parser.parseSuccessor(destination))
+      return failure();
+    if (name != "default") {
+      names.push_back(parser.getBuilder().getStringAttr(name));
+      destinations.push_back(destination);
+    } else if (names.empty() && !defaultDestination) {
+      defaultDestination = destination;
+    } else {
+      return parser.emitError(loc, "expected the default case first");
+    }
+    return success();
+  };
+  if (parser.parseOperand(input) || parser.parseColon() ||
+      parser.parseType(inputType) ||
+      parser.resolveOperand(input, inputType, result.operands) ||
+      parser.parseComma() ||
+      parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Square,
+                                     parseCase) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  if (defaultDestination)
+    destinations.push_back(defaultDestination);
+  result.addAttribute(getCaseNamesAttrName(result.name),
+                      parser.getBuilder().getArrayAttr(names));
+  result.addSuccessors(destinations);
+  return success();
+}
+
+void DepSumSwitchOp::print(OpAsmPrinter &printer) {
+  printer << ' ' << getInput() << " : " << getInput().getType() << ", [";
+  printer.increaseIndent();
+  auto printCase = [&](StringRef name, Block *destination, bool last) {
+    printer.printNewline();
+    printer << name << ": ";
+    printer.printSuccessor(destination);
+    if (!last)
+      printer << ',';
+  };
+  size_t count = getCaseNames().size();
+  if (Block *defaultDestination = getDefaultDestination())
+    printCase("default", defaultDestination, count == 0);
+  for (auto [index, name] :
+       llvm::enumerate(getCaseNames().getAsValueRange<StringAttr>()))
+    printCase(name, getDestinations()[index], index + 1 == count);
+  printer.decreaseIndent();
+  printer.printNewline();
+  printer << ']';
+  printer.printOptionalAttrDict((*this)->getAttrs(), {getCaseNamesAttrName()});
+}
+
+Block *DepSumSwitchOp::getDefaultDestination() {
+  if (getDestinations().size() == getCaseNames().size())
+    return nullptr;
+  return getDestinations().back();
+}
+
+/// Verifies that every case is listed once, or handled by `default`, and that
+/// each successor takes the fields of its case.
+LogicalResult DepSumSwitchOp::verify() {
+  SumType inputType = getInput().getType();
+  size_t count = getCaseNames().size();
+  if (getDestinations().size() != count &&
+      getDestinations().size() != count + 1)
+    return emitOpError() << "expects one successor per case and at most one "
+                            "default successor";
+  llvm::SmallDenseSet<StringRef> listed;
+  for (auto [index, name] :
+       llvm::enumerate(getCaseNames().getAsValueRange<StringAttr>())) {
+    std::optional<SmallVector<Type>> fieldTypes = inputType.getCaseFields(name);
+    if (!fieldTypes)
+      return emitOpError() << "expects '" << name << "' to be a case of "
+                           << inputType;
+    if (!listed.insert(name).second)
+      return emitOpError() << "expects case '" << name << "' to be listed once";
+    if (getDestinations()[index]->getArgumentTypes() != TypeRange(*fieldTypes))
+      return emitOpError() << "expects the successor of case '" << name
+                           << "' to take arguments of types (" << *fieldTypes
+                           << ")";
+  }
+  bool exhaustive = listed.size() == inputType.getCases().size();
+  if (!getDefaultDestination() && !exhaustive)
+    return emitOpError() << "expects every case to be listed, or a default "
+                            "case";
+  if (getDefaultDestination() && exhaustive)
+    return emitOpError() << "expects the default case to handle at least one "
+                            "case";
+  return success();
+}
+
+/// The switch produces every argument of the successor and forwards no
+/// operands.
+SuccessorOperands DepSumSwitchOp::getSuccessorOperands(unsigned index) {
+  return SuccessorOperands(getDestinations()[index]->getNumArguments(),
+                           MutableOperandRange(getOperation(), 1, 0));
 }

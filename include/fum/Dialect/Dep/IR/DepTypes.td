@@ -69,4 +69,29 @@ def DepTypeType : TypeDef<Dep_Dialect, "DependentType"> {
   }];
 }
 
+def DepSumType : TypeDef<Dep_Dialect, "Sum"> {
+  let mnemonic = "sum";
+  let summary = "Finite sum of named cases";
+  let description = [{
+    A value of type `!dep.sum<c1(T1, ..., Tk), c2, ...>` is one of the cases
+    `c1`, `c2`, ..., with one value of each field type of that case. A case
+    without fields is written without parentheses. There is at least one case
+    and the names are distinct. The cases are a dictionary from names to
+    field types, so they may be written in any order and are printed sorted
+    by name.
+
+    ```mlir
+    !dep.sum<circle(f32), rectangle(f32, f32), point>
+    ```
+  }];
+  let parameters = (ins "::mlir::DictionaryAttr":$cases);
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+  let extraClassDeclaration = [{
+    /// Returns the field types of the case named `name`, if there is one.
+    std::optional<::llvm::SmallVector<::mlir::Type>>
+    getCaseFields(::llvm::StringRef name) const;
+  }];
+}
+
 #endif // DEP_TYPES
